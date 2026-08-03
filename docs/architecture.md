@@ -3,83 +3,89 @@
 ## Module identity
 
 - **Technical module name:** `bosta_integration`
-- **Primary configuration model:** `bosta.integration.config`
-- **Odoo version:** 18
+- **Configuration model:** `bosta.integration.config`
+- **Target platform:** Odoo 18
+- **Dashboard entry point:** `https://business.bosta.co/orders`
 
-## Purpose
+## Purpose and independence
 
-`bosta_integration` is an independent Odoo module intended to integrate with the
-Bosta Business Dashboard and, in future phases, import complete Bosta order
-details into Odoo.
+`bosta_integration` is an independent module intended to authenticate to the
+Bosta Business Dashboard and import complete Bosta order details in later
+phases. The legacy `bosta_orders` module is read-only reference material.
 
-The legacy `bosta_orders` module is read-only reference material. The new module
-must install and run without that module being installed, has no dependency on
-it, and does not import from it.
+The new module:
 
-## Phase 0 scope
+- does not depend on `bosta_orders`;
+- does not import from `odoo.addons.bosta_orders`;
+- does not reuse the legacy module at runtime; and
+- must install when the legacy module is absent.
 
-Phase 0 establishes only a clean, installable baseline:
+## Completed scope
 
-- minimal manifest dependencies;
-- a minimal company-scoped configuration model;
-- administrator-only baseline access and menus;
-- clean Python package imports;
-- an architecture and migration plan;
-- basic namespace and manifest tests; and
-- removal of generated or machine-local files.
+### Phase 0 — Baseline
 
-Phase 0 deliberately excludes Dashboard login, credentials, cookies, browser
-sessions, scraping, order import, inventory, accounting, and scheduled jobs.
+Phase 0 established the independent module skeleton, minimal `base` dependency,
+company-scoped configuration model, clean package imports, namespace checks,
+and planning documentation.
+
+### Phase 1 — Configuration and security
+
+Phase 1 adds only secure configuration storage and access controls:
+
+- one configuration per company;
+- Dashboard URL and login settings;
+- a non-stored new-password input;
+- Fernet-authenticated password encryption using a server environment key;
+- password-configured and credential-audit fields;
+- explicit manager-only password clearing;
+- disabled-by-default integration activation with credential validation;
+- independent Bosta Integration User and Manager groups;
+- manager-only configuration ACLs and menus; and
+- allowed-company record isolation.
+
+Phase 1 does **not** perform Dashboard authentication or network requests.
 
 ## Future phases
 
-The exact phase boundaries may be refined after the Dashboard behavior and data
-contract are documented.
+1. **Phase 2 — Authentication and session lifecycle:** browser automation,
+   Dashboard login, session establishment, expiry detection, and safe runtime
+   session-state handling.
+2. **Phase 3 — Order discovery and parsing:** order-list navigation, complete
+   detail extraction, normalization, snapshots, and idempotent import staging.
+3. **Phase 4 — Odoo order integration:** customer/product matching and approved
+   sales-document mapping.
+4. **Later approved phases:** tracking, inventory, accounting, reconciliation,
+   profit reporting, and scheduled jobs.
 
-1. **Phase 1 — Configuration and security:** independent user/manager groups,
-   company isolation, and secure Dashboard configuration fields.
-2. **Phase 2 — Authentication and session lifecycle:** browser automation,
-   session establishment, expiry detection, redacted diagnostics, and secure
-   local runtime storage.
-3. **Phase 3 — Order discovery and detail parsing:** list navigation, complete
-   order-detail extraction, normalization, source snapshots, and idempotency.
-4. **Phase 4 — Odoo order integration:** customer and product matching, import
-   records, sales-document mapping, status history, and reconciliation.
-5. **Later phases — Optional operations:** inventory, accounting, and cron jobs
-   only after explicit requirements and safety controls are approved.
+No future-phase implementation files are created in Phase 1.
 
-## Secret-handling policy
+## Security boundaries
 
-Dashboard usernames, passwords, cookies, authentication state, browser profiles,
-and session files must never be committed to Git. Runtime artifacts such as
-`playwright/.auth/`, `storage_state*.json`, and `browser_session*.json` are
-ignored by the repository.
+Dashboard passwords are encrypted with `cryptography.fernet.Fernet`. The key is
+read only from `BOSTA_DASHBOARD_ENCRYPTION_KEY` in the server environment. It is
+not stored in PostgreSQL or Odoo system parameters.
 
-## Legacy migration matrix
+Dashboard credentials, encryption keys, cookies, browser profiles, storage
+state, and session files must never be committed. The repository ignores `.env`,
+`playwright/.auth/`, `storage_state*.json`, and `browser_session*.json`.
 
-This matrix is planning only. No legacy business logic is ported in Phase 0.
+The encrypted password is an internal model field and never appears in a form,
+list, search view, notification, chatter message, or log. Ordinary integration
+users receive no configuration-model ACL. Managers can access only records for
+companies in their active allowed-company set.
 
-| Old source file from `bosta_orders` | Reusable logic | Future target in `bosta_integration` | Required adaptation | Decision | Future phase |
+## Phase 1 migration matrix
+
+This matrix records architectural decisions only. Legacy business logic remains
+unported.
+
+| Old source file from `bosta_orders` | Reusable concept | New target in `bosta_integration` | Required adaptation | Decision | Phase |
 |---|---|---|---|---|---|
-| `__manifest__.py` | Odoo metadata conventions | `__manifest__.py` | Independent dependencies, data paths, and phase descriptions | Rewrite | Phase 0 and each later phase |
-| `models/bosta_config.py` | Company-scoped configuration patterns | `models/bosta_config.py` | Keep `bosta.integration.config`; replace API and Shopify assumptions with secure Dashboard settings | Rewrite | Phase 1 |
-| `views/bosta_config_views.xml` | General list/form/search layout | `views/bosta_config_views.xml` | New fields, new XML IDs, and independent groups | Adapt | Phase 1 |
-| `security/bosta_security.xml` | User/manager role concept | Future security XML | Recreate with least privilege and no legacy implied groups | Rewrite | Phase 1 |
-| `security/ir.model.access.csv` | ACL structure | `security/ir.model.access.csv` | Use independent groups and new model IDs | Rewrite | Phase 1 |
-| `security/bosta_record_rules.xml` | Multi-company isolation concept | Future record-rules XML | Recreate for new models and groups | Adapt | Phase 1 |
-| `services/bosta_client.py` | Retry, logging, and response validation patterns | Future Dashboard browser/session services | Replace API-key requests with Dashboard authentication and session handling | Rewrite | Phase 2 |
-| `services/exceptions.py` | Exception taxonomy concept | Future `services/exceptions.py` | Add login, session, browser, parsing, and import errors | Adapt | Phase 2 |
-| `controllers/shopify_inbound_controller.py` and related Shopify files | None for the current direction | None | Excluded legacy inbound architecture | Ignore | Not planned |
-| `services/bosta_mapper.py` | Remote-to-Odoo mapping separation | Future order parser/mapper | Rebuild against observed Dashboard order-detail data | Adapt | Phase 3 |
-| `services/order_sync_service.py` | Idempotent orchestration concept | Future order import service | Rebuild around Dashboard records and independent models | Adapt | Phase 3 |
-| `services/customer_matcher.py` and `services/phone_utils.py` | Matching and normalization concepts | Future customer utilities | Reassess privacy, matching priority, and duplicate safety | Adapt | Phase 3 |
-| `services/product_matcher.py` and `models/bosta_sku_mapping.py` | SKU matching concepts | Future product/SKU components | Recreate after the imported order schema is stable | Adapt | Phase 3 or 4 |
-| `models/bosta_delivery.py` | Remote identity and idempotency concepts | Future Bosta order/import model | Replace delivery-API assumptions with Dashboard order state | Rewrite | Phase 3 |
-| `models/bosta_status_mapping.py` and `models/bosta_status_history.py` | Status normalization/history concepts | Future status models | Validate semantics against Dashboard evidence | Adapt | Phase 4 |
-| `models/bosta_sync_log.py` | Operational audit-log concept | Future import log model | Redesign for login, scraping, parsing, import, and redacted diagnostics | Adapt | Phase 2 or 3 |
-| `services/tracking_*` and `services/status_catalog.py` | Idempotent status processing concepts | Future status services | Revalidate all status codes and actions | Adapt | Phase 4 |
-| `models/sale_order.py`, `models/sale_order_line.py`, and `models/res_partner.py` | Odoo extension patterns | Future sales/customer integration | Add only after import requirements are stable | Adapt | Phase 4 |
-| `models/stock_picking.py`, inventory services, and Phase 9 security data | Guarded stock-flow concepts | Future inventory integration | Full redesign; do not add stock dependencies prematurely | Rewrite | Later inventory phase |
-| Accounting configuration concepts | Disabled-by-default safety approach | Future accounting components | Add only after explicit accounting requirements | Rewrite | Later accounting phase |
-| Legacy tests | Edge cases and testing patterns | New phase-specific tests | Rewrite imports, fixtures, models, and expected behavior | Adapt | Every future phase |
-| Legacy documentation | Historical domain notes | New documentation | Rewrite around Dashboard architecture and security | Adapt | Relevant future phase |
+| `models/bosta_config.py` | Company configuration, disabled-by-default activation, credential-safety ideas | `models/bosta_config.py` | Preserve `bosta.integration.config`; replace API-key, Shopify, sales, stock, accounting, and sync fields with Dashboard-only secure fields | Rewrite | Phase 1 |
+| `security/bosta_security.xml` | Module category and User/Manager hierarchy | `security/bosta_security.xml` | Independent IDs; Manager implies User; no sales/stock groups and no automatic user assignment | Rewrite | Phase 1 |
+| `security/bosta_record_rules.xml` | Allowed-company isolation | `security/bosta_record_rules.xml` | Apply only to the new configuration model and manager group | Adapt | Phase 1 |
+| `security/ir.model.access.csv` | Manager CRUD pattern | `security/ir.model.access.csv` | Manager-only configuration ACL; no ordinary-user credential access | Rewrite | Phase 1 |
+| `views/bosta_config_views.xml` | Configuration list/form/search organization | `views/bosta_config_views.xml` | Dashboard fields, masked non-stored input, manager-only menus/action, no encrypted field in views | Rewrite | Phase 1 |
+| `tests/test_bosta_config.py` | Patched environment, company-isolation, and redaction test ideas | `tests/test_crypto_service.py`, `tests/test_configuration_security.py` | Replace public API-key assumptions with Fernet and Dashboard credentials | Adapt | Phase 1 |
+| Shopify groups, fields, routes, and tests | None | None | Excluded from the independent Dashboard direction | Ignore | Not planned |
+| Delivery, tracking, sales, inventory, accounting, cron, and profit code | Later domain ideas only | Future phase-specific files | Reassess and rewrite only after explicit requirements | Ignore for now | Phase 2+ |

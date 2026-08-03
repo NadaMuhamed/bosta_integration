@@ -3,11 +3,14 @@
     <record id="view_bosta_integration_config_list" model="ir.ui.view">
         <field name="name">bosta.integration.config.list</field>
         <field name="model">bosta.integration.config</field>
+        <field name="groups_id" eval="[(4, ref('bosta_integration.group_bosta_integration_manager'))]"/>
         <field name="arch" type="xml">
             <list string="Bosta Configurations">
                 <field name="name"/>
-                <field name="company_id"/>
-                <field name="active"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+                <field name="integration_enabled"/>
+                <field name="dashboard_password_configured"/>
+                <field name="active" optional="hide"/>
             </list>
         </field>
     </record>
@@ -15,16 +18,52 @@
     <record id="view_bosta_integration_config_form" model="ir.ui.view">
         <field name="name">bosta.integration.config.form</field>
         <field name="model">bosta.integration.config</field>
+        <field name="groups_id" eval="[(4, ref('bosta_integration.group_bosta_integration_manager'))]"/>
         <field name="arch" type="xml">
-            <form string="Bosta Configuration">
+            <form string="Bosta Integration Configuration">
+                <header>
+                    <button
+                        name="action_clear_saved_password"
+                        type="object"
+                        string="Clear Saved Password"
+                        class="btn-secondary"
+                        groups="bosta_integration.group_bosta_integration_manager"
+                        confirm="Clear the saved Bosta Dashboard password and disable the integration?"
+                        invisible="not dashboard_password_configured"
+                    />
+                </header>
                 <sheet>
-                    <group>
-                        <field name="name"/>
-                        <field name="company_id"/>
-                        <field name="active"/>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
+                    <group string="General">
+                        <group>
+                            <field name="name"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="active"/>
+                        </group>
+                        <group>
+                            <field name="integration_enabled"/>
+                        </group>
                     </group>
+
+                    <group string="Bosta Dashboard Credentials">
+                        <group>
+                            <field name="dashboard_url" placeholder="https://business.bosta.co/orders"/>
+                            <field name="dashboard_login"/>
+                            <field
+                                name="dashboard_password_input"
+                                password="True"
+                                placeholder="Enter a new password"
+                            />
+                        </group>
+                        <group>
+                            <field name="dashboard_password_configured" readonly="1"/>
+                            <field name="credentials_updated_at" readonly="1"/>
+                            <field name="credentials_updated_by" readonly="1"/>
+                        </group>
+                    </group>
+
                     <div class="text-muted">
-                        Dashboard credentials and session settings will be introduced in Phase 1.
+                        The password input is encrypted with a server-provided key and is empty whenever this form is reopened.
                     </div>
                 </sheet>
             </form>
@@ -34,15 +73,14 @@
     <record id="view_bosta_integration_config_search" model="ir.ui.view">
         <field name="name">bosta.integration.config.search</field>
         <field name="model">bosta.integration.config</field>
+        <field name="groups_id" eval="[(4, ref('bosta_integration.group_bosta_integration_manager'))]"/>
         <field name="arch" type="xml">
             <search string="Bosta Configurations">
                 <field name="name"/>
-                <field name="company_id"/>
-                <filter
-                    name="inactive"
-                    string="Archived"
-                    domain="[('active', '=', False)]"
-                />
+                <field name="company_id" groups="base.group_multi_company"/>
+                <filter name="enabled" string="Enabled" domain="[('integration_enabled', '=', True)]"/>
+                <filter name="password_configured" string="Password Configured" domain="[('dashboard_password_configured', '=', True)]"/>
+                <filter name="inactive" string="Archived" domain="[('active', '=', False)]"/>
             </search>
         </field>
     </record>
@@ -51,17 +89,14 @@
         <field name="name">Bosta Configuration</field>
         <field name="res_model">bosta.integration.config</field>
         <field name="view_mode">list,form</field>
-        <field
-            name="search_view_id"
-            ref="view_bosta_integration_config_search"
-        />
+        <field name="search_view_id" ref="view_bosta_integration_config_search"/>
     </record>
 
     <menuitem
         id="menu_bosta_integration_root"
         name="Bosta Integration"
         sequence="30"
-        groups="base.group_system"
+        groups="bosta_integration.group_bosta_integration_manager"
     />
 
     <menuitem
@@ -70,6 +105,6 @@
         parent="menu_bosta_integration_root"
         action="action_bosta_integration_config"
         sequence="10"
-        groups="base.group_system"
+        groups="bosta_integration.group_bosta_integration_manager"
     />
 </odoo>

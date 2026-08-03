@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+        <record id="rule_bosta_integration_config_company" model="ir.rule">
+            <field name="name">Bosta Integration Configuration: allowed companies</field>
+            <field name="model_id" ref="model_bosta_integration_config"/>
+            <field name="domain_force">[("company_id", "in", company_ids)]</field>
+            <field name="groups" eval="[(4, ref('bosta_integration.group_bosta_integration_manager'))]"/>
+        </record>
+    </data>
+</odoo>
