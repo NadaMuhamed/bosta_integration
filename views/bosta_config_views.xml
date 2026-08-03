@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_bosta_integration_config_list" model="ir.ui.view">
+        <field name="name">bosta.integration.config.list</field>
+        <field name="model">bosta.integration.config</field>
+        <field name="arch" type="xml">
+            <list string="Bosta Configurations">
+                <field name="name"/>
+                <field name="company_id"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_bosta_integration_config_form" model="ir.ui.view">
+        <field name="name">bosta.integration.config.form</field>
+        <field name="model">bosta.integration.config</field>
+        <field name="arch" type="xml">
+            <form string="Bosta Configuration">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="company_id"/>
+                        <field name="active"/>
+                    </group>
+                    <div class="text-muted">
+                        Dashboard credentials and session settings will be introduced in Phase 1.
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_bosta_integration_config_search" model="ir.ui.view">
+        <field name="name">bosta.integration.config.search</field>
+        <field name="model">bosta.integration.config</field>
+        <field name="arch" type="xml">
+            <search string="Bosta Configurations">
+                <field name="name"/>
+                <field name="company_id"/>
+                <filter
+                    name="inactive"
+                    string="Archived"
+                    domain="[('active', '=', False)]"
+                />
+            </search>
+        </field>
+    </record>
+
+    <record id="action_bosta_integration_config" model="ir.actions.act_window">
+        <field name="name">Bosta Configuration</field>
+        <field name="res_model">bosta.integration.config</field>
+        <field name="view_mode">list,form</field>
+        <field
+            name="search_view_id"
+            ref="view_bosta_integration_config_search"
+        />
+    </record>
+
+    <menuitem
+        id="menu_bosta_integration_root"
+        name="Bosta Integration"
+        sequence="30"
+        groups="base.group_system"
+    />
+
+    <menuitem
+        id="menu_bosta_integration_configuration"
+        name="Configuration"
+        parent="menu_bosta_integration_root"
+        action="action_bosta_integration_config"
+        sequence="10"
+        groups="base.group_system"
+    />
+</odoo>
