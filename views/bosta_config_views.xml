@@ -10,6 +10,8 @@
                 <field name="company_id" groups="base.group_multi_company"/>
                 <field name="integration_enabled"/>
                 <field name="dashboard_password_configured"/>
+                <field name="session_status"/>
+                <field name="session_configured"/>
                 <field name="active" optional="hide"/>
             </list>
         </field>
@@ -22,6 +24,22 @@
         <field name="arch" type="xml">
             <form string="Bosta Integration Configuration">
                 <header>
+                    <button
+                        name="action_test_dashboard_login"
+                        type="object"
+                        string="Test Login"
+                        class="btn-primary"
+                        groups="bosta_integration.group_bosta_integration_manager"
+                    />
+                    <button
+                        name="action_reset_dashboard_session"
+                        type="object"
+                        string="Reset Dashboard Session"
+                        class="btn-secondary"
+                        groups="bosta_integration.group_bosta_integration_manager"
+                        confirm="Reset only the saved browser session? The saved Dashboard password will be kept."
+                        invisible="not session_configured"
+                    />
                     <button
                         name="action_clear_saved_password"
                         type="object"
@@ -62,8 +80,22 @@
                         </group>
                     </group>
 
+                    <group string="Authentication Session">
+                        <group>
+                            <field name="session_status" readonly="1"/>
+                            <field name="session_configured" readonly="1"/>
+                            <field name="browser_timeout_seconds"/>
+                        </group>
+                        <group>
+                            <field name="last_login_attempt_at" readonly="1"/>
+                            <field name="last_successful_login_at" readonly="1"/>
+                            <field name="last_session_validation_at" readonly="1"/>
+                            <field name="last_auth_error" readonly="1"/>
+                        </group>
+                    </group>
+
                     <div class="text-muted">
-                        The password input is encrypted with a server-provided key and is empty whenever this form is reopened.
+                        Password and browser-session data are encrypted with a server-provided key. The password input is empty whenever this form is reopened, and cookies or storage-state contents are never displayed.
                     </div>
                 </sheet>
             </form>
@@ -80,6 +112,7 @@
                 <field name="company_id" groups="base.group_multi_company"/>
                 <filter name="enabled" string="Enabled" domain="[('integration_enabled', '=', True)]"/>
                 <filter name="password_configured" string="Password Configured" domain="[('dashboard_password_configured', '=', True)]"/>
+                <filter name="session_authenticated" string="Authenticated Session" domain="[('session_status', '=', 'authenticated')]"/>
                 <filter name="inactive" string="Archived" domain="[('active', '=', False)]"/>
             </search>
         </field>
