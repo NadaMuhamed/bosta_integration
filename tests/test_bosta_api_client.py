@@ -70,6 +70,57 @@ class TestBostaApiClient(TestCase):
         self.assertTrue(url.endswith("/api/v2/deliveries/business/12%2F34"))
         self.assertIsNone(kwargs["json"])
 
+    def test_client_rejects_non_bosta_base_url(self):
+        rejected = [
+            "http://app.bosta.co",
+            "https://evil.example",
+            "https://app.bosta.co.example.com",
+            "https://user:pass@app.bosta.co",
+            "https://app.bosta.co:444",
+            "https://app.bosta.co:443",
+            "https://app.bosta.co/path",
+            "https://app.bosta.co?x=1",
+            "https://app.bosta.co#fragment",
+        ]
+        for base_url in rejected:
+            with self.subTest(base_url=base_url), self.assertRaises(BostaApiConfigurationError):
+                BostaApiClient(
+                    base_url=base_url,
+                    transport=QueueTransport([]),
+                    environ=ENV,
+                )
+
+        client = BostaApiClient(
+            base_url=" https://app.bosta.co/ ",
+            transport=QueueTransport([]),
+            environ=ENV,
+        )
+        self.assertEqual(client.base_url, "https://app.bosta.co")
+
+    def test_invalid_base_url_fails_before_loading_or_sending_api_key(self):
+        transport = QueueTransport([])
+        with patch.object(
+            BostaApiClient,
+            "_load_api_key",
+            side_effect=AssertionError("API key must not be loaded for an unsafe origin"),
+        ) as load_api_key:
+            with self.assertRaises(BostaApiConfigurationError):
+                BostaApiClient(
+                    base_url="https://evil.example",
+                    transport=transport,
+                    environ=ENV,
+                )
+
+            # Defense in depth: even if public state is changed after a valid
+            # construction, request-time validation must fail before headers.
+            client = BostaApiClient(transport=transport, environ=ENV)
+            client.base_url = "https://evil.example"
+            with self.assertRaises(BostaApiConfigurationError):
+                client.search_deliveries()
+
+        load_api_key.assert_not_called()
+        self.assertEqual(transport.calls, [])
+
     def test_missing_or_whitespace_api_key_fails_before_network(self):
         for env in ({}, {"BOSTA_API_KEY": ""}, {"BOSTA_API_KEY": "   "}):
             transport = QueueTransport([])

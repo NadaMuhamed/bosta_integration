@@ -26,14 +26,14 @@ class TestBostaIntegrationBaseline(TransactionCase):
     def test_configuration_model_is_registered(self):
         self.assertEqual(self.env["bosta.integration.config"]._name, "bosta.integration.config")
 
-    def test_manifest_is_phase_2r_and_independent(self):
+    def test_manifest_remains_independent_after_phase3_version_bump(self):
         manifest = get_manifest("bosta_integration")
-        self.assertEqual(manifest["version"], "18.0.4.0.0")
+        self.assertEqual(manifest["version"], "18.0.5.0.0")
         self.assertEqual(manifest.get("depends"), ["base"])
         self.assertTrue(manifest.get("installable"))
         self.assertFalse(
             manifest.get("external_dependencies"),
-            "Phase 2R must not declare external dependencies",
+            "The module must not declare external dependencies",
         )
         self.assertNotIn("bosta_orders", manifest.get("depends", []))
 

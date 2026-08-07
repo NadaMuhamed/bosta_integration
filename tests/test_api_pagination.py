@@ -112,6 +112,30 @@ class TestBostaApiPagination(TestCase):
         self.assertEqual(len(result), 3)
         self.assertEqual(sum(item.get("_id") == "delivery-a" for item in result), 1)
 
+    def test_duplicate_identity_aliases_are_propagated(self):
+        first = [
+            {"_id": "A", "trackingNumber": "T1"},
+            {"_id": "X", "trackingNumber": "TX"},
+        ]
+        second = [
+            {"_id": "A", "trackingNumber": "T2"},
+            {"_id": "Y", "trackingNumber": "TY"},
+        ]
+        third = [
+            {"_id": "B", "trackingNumber": "T2"},
+            {"_id": "Z", "trackingNumber": "TZ"},
+        ]
+        client, transport = self.client(
+            [payload(first), payload(second), payload(third), payload([])],
+            page_size=2,
+        )
+
+        result = client.get_all_deliveries()
+
+        self.assertEqual([item["_id"] for item in result], ["A", "X", "Y", "Z"])
+        self.assertNotIn("B", [item["_id"] for item in result])
+        self.assertEqual([call[2]["json"]["page"] for call in transport.calls], [1, 2, 3, 4])
+
     def test_repeated_identical_full_page_raises(self):
         first = [delivery(index) for index in range(1500)]
         client, transport = self.client([payload(first), payload(first)])

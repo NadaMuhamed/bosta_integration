@@ -1,2 +1,6 @@
 id,name,model_id/id,group_id/id,perm_read,perm_write,perm_create,perm_unlink
 access_bosta_config_admin,bosta.integration.config.manager,model_bosta_integration_config,bosta_integration.group_bosta_integration_manager,1,1,1,1
+access_bosta_delivery_manager,bosta.delivery.manager,model_bosta_delivery,bosta_integration.group_bosta_integration_manager,1,1,1,1
+access_bosta_delivery_user,bosta.delivery.user,model_bosta_delivery,bosta_integration.group_bosta_integration_user,1,0,0,0
+access_bosta_delivery_item_manager,bosta.delivery.item.manager,model_bosta_delivery_item,bosta_integration.group_bosta_integration_manager,1,1,1,1
+access_bosta_delivery_item_user,bosta.delivery.item.user,model_bosta_delivery_item,bosta_integration.group_bosta_integration_user,1,0,0,0

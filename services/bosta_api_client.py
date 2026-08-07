@@ -9,7 +9,7 @@ import hashlib
 import json
 import os
 import time
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import requests
 
@@ -47,7 +47,7 @@ class BostaApiClient:
         max_retries=2,
         backoff_seconds=0.25,
     ):
-        self.base_url = base_url.rstrip("/")
+        self.base_url = self._validate_base_url(base_url)
         self.api_key_env_var = api_key_env_var
         self.timeout = timeout
         self.page_size = self._validate_page_size(page_size)
@@ -57,6 +57,40 @@ class BostaApiClient:
         self.environ = environ if environ is not None else os.environ
         self.max_retries = max(0, int(max_retries))
         self.backoff_seconds = max(0.0, float(backoff_seconds))
+
+    @staticmethod
+    def _validate_base_url(value):
+        """Validate and normalize the only origin authorized to receive the API key."""
+        if not isinstance(value, str):
+            raise BostaApiConfigurationError(
+                "The Bosta API base URL must be exactly https://app.bosta.co."
+            )
+
+        normalized = value.strip()
+        try:
+            parsed = urlsplit(normalized)
+            port = parsed.port
+        except (TypeError, ValueError):
+            raise BostaApiConfigurationError(
+                "The Bosta API base URL must be exactly https://app.bosta.co."
+            ) from None
+
+        if (
+            parsed.scheme.lower() != "https"
+            or parsed.hostname != "app.bosta.co"
+            or parsed.netloc != "app.bosta.co"
+            or parsed.username is not None
+            or parsed.password is not None
+            or port is not None
+            or parsed.path not in ("", "/")
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise BostaApiConfigurationError(
+                "The Bosta API base URL must be exactly https://app.bosta.co."
+            )
+
+        return "https://app.bosta.co"
 
     @staticmethod
     def _validate_page_size(value):
@@ -87,7 +121,10 @@ class BostaApiClient:
         }
 
     def _url(self, path):
-        return f"{self.base_url}{path}"
+        # Revalidate at request time as well as construction time so a mutated
+        # client can never load an API key for, or send it to, another origin.
+        base_url = self._validate_base_url(self.base_url)
+        return f"{base_url}{path}"
 
     @staticmethod
     def _safe_retry_after(response):
@@ -263,9 +300,31 @@ class BostaApiClient:
             self.max_pages if max_pages is None else max_pages
         )
 
-        seen_id_values = set()
-        seen_tracking_numbers = set()
+        # Map each stable identity to a logical-delivery group. A duplicate
+        # payload can introduce a new alias (for example the same `_id` with a
+        # changed tracking number); registering every alias prevents transitive
+        # identity chains from being yielded as new deliveries later.
+        identity_to_group = {}
+        group_parent = {}
+        next_group = 0
         seen_page_fingerprints = set()
+
+        def find(group):
+            root = group
+            while group_parent[root] != root:
+                root = group_parent[root]
+            while group_parent[group] != group:
+                parent = group_parent[group]
+                group_parent[group] = root
+                group = parent
+            return root
+
+        def union(left, right):
+            left_root = find(left)
+            right_root = find(right)
+            if left_root != right_root:
+                group_parent[right_root] = left_root
+            return left_root
 
         for page in range(1, page_limit + 1):
             deliveries, payload = self.search_deliveries(page=page, limit=limit)
@@ -280,19 +339,35 @@ class BostaApiClient:
             new_delivery_count = 0
             for delivery in deliveries:
                 identities = self._delivery_identities(delivery)
-                duplicate = any(
-                    (kind == "_id" and value in seen_id_values)
-                    or (kind == "trackingNumber" and value in seen_tracking_numbers)
-                    for kind, value in identities
-                )
-                if duplicate:
+                known_groups = {
+                    find(identity_to_group[identity])
+                    for identity in identities
+                    if identity in identity_to_group
+                }
+
+                if known_groups:
+                    root = next(iter(known_groups))
+                    for group in known_groups:
+                        root = union(root, group)
+
+                    # Critical alias propagation: even though this payload is a
+                    # duplicate, every identity it contains now belongs to the
+                    # same logical delivery and must be remembered for later
+                    # pages.
+                    for identity in identities:
+                        existing_group = identity_to_group.get(identity)
+                        if existing_group is not None:
+                            root = union(root, existing_group)
+                        identity_to_group[identity] = root
                     continue
 
-                for kind, value in identities:
-                    if kind == "_id":
-                        seen_id_values.add(value)
-                    elif kind == "trackingNumber":
-                        seen_tracking_numbers.add(value)
+                if identities:
+                    group = next_group
+                    next_group += 1
+                    group_parent[group] = group
+                    for identity in identities:
+                        identity_to_group[identity] = group
+
                 new_delivery_count += 1
                 yield delivery
 

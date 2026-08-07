@@ -4,3 +4,6 @@ from . import test_api_pagination
 from . import test_baseline
 from . import test_bosta_api_client
 from . import test_configuration_security
+from . import test_delivery_models
+from . import test_delivery_security
+from . import test_phase3_baseline

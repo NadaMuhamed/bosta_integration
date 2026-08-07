@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_bosta_delivery_list" model="ir.ui.view">
+        <field name="name">bosta.delivery.list</field>
+        <field name="model">bosta.delivery</field>
+        <field name="arch" type="xml">
+            <list string="Bosta Deliveries" default_order="bosta_updated_at desc,id desc">
+                <field name="tracking_number"/>
+                <field name="delivery_type_value"/>
+                <field name="flow_type"/>
+                <field name="state_value"/>
+                <field name="creation_source"/>
+                <field name="business_reference" optional="show"/>
+                <field name="cod_amount" optional="show"/>
+                <field name="bosta_updated_at" optional="show"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_bosta_delivery_search" model="ir.ui.view">
+        <field name="name">bosta.delivery.search</field>
+        <field name="model">bosta.delivery</field>
+        <field name="arch" type="xml">
+            <search string="Bosta Deliveries">
+                <field name="tracking_number"/>
+                <field name="bosta_delivery_id"/>
+                <field name="business_reference"/>
+                <field name="unique_business_reference"/>
+                <field name="receiver_name"/>
+                <field name="receiver_phone"/>
+                <field name="creation_source"/>
+                <field name="delivery_type_value"/>
+                <field name="state_value"/>
+                <filter name="flow_forward" string="Forward" domain="[('flow_type', '=', 'forward')]"/>
+                <filter name="flow_return_to_origin" string="Return to Origin" domain="[('flow_type', '=', 'return_to_origin')]"/>
+                <filter name="flow_customer_return" string="Customer Return" domain="[('flow_type', '=', 'customer_return')]"/>
+                <filter name="state_delivered" string="Delivered raw state" domain="[('state_value', '=', 'Delivered')]"/>
+                <separator/>
+                <filter name="group_company" string="Company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
+            </search>
+        </field>
+    </record>
+
+    <record id="view_bosta_delivery_form" model="ir.ui.view">
+        <field name="name">bosta.delivery.form</field>
+        <field name="model">bosta.delivery</field>
+        <field name="arch" type="xml">
+            <form string="Bosta Delivery">
+                <sheet>
+                    <group string="Identity">
+                        <group>
+                            <field name="tracking_number"/>
+                            <field name="bosta_delivery_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                        <group>
+                            <field name="delivery_type_code"/>
+                            <field name="delivery_type_value"/>
+                            <field name="flow_type" readonly="1"/>
+                            <field name="item_count" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Source &amp; References">
+                            <group>
+                                <group>
+                                    <field name="creation_source"/>
+                                    <field name="business_reference"/>
+                                    <field name="unique_business_reference"/>
+                                </group>
+                                <group string="Shopify metadata">
+                                    <field name="shopify_order_id"/>
+                                    <field name="shopify_order_number"/>
+                                    <field name="shopify_store_name"/>
+                                    <field name="shopify_created_at"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="Receiver">
+                            <group>
+                                <field name="receiver_bosta_id"/>
+                                <field name="receiver_name"/>
+                                <field name="receiver_phone"/>
+                                <field name="receiver_second_phone"/>
+                            </group>
+                        </page>
+
+                        <page string="State &amp; Timestamps">
+                            <group>
+                                <group string="Raw Bosta State">
+                                    <field name="state_code"/>
+                                    <field name="state_value"/>
+                                    <field name="state_child_state"/>
+                                    <field name="masked_state"/>
+                                </group>
+                                <group string="Timestamps">
+                                    <field name="bosta_created_at"/>
+                                    <field name="bosta_updated_at"/>
+                                    <field name="pending_pickup_at"/>
+                                    <field name="collected_from_business_at"/>
+                                    <field name="picked_up_at"/>
+                                    <field name="delivery_time"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="Address">
+                            <group>
+                                <group>
+                                    <field name="dropoff_country_code"/>
+                                    <field name="dropoff_country_name"/>
+                                    <field name="dropoff_city"/>
+                                    <field name="dropoff_zone"/>
+                                    <field name="dropoff_district"/>
+                                </group>
+                                <group>
+                                    <field name="dropoff_first_line"/>
+                                    <field name="dropoff_second_line"/>
+                                    <field name="dropoff_building_number"/>
+                                    <field name="dropoff_floor"/>
+                                    <field name="dropoff_apartment"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="Package">
+                            <group>
+                                <group>
+                                    <field name="package_items_count"/>
+                                    <field name="package_type"/>
+                                    <field name="package_size"/>
+                                    <field name="package_weight"/>
+                                </group>
+                                <group string="Attempts">
+                                    <field name="attempts_count"/>
+                                    <field name="delivery_attempts_count"/>
+                                    <field name="return_attempts_count"/>
+                                    <field name="pickup_attempts_count"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="COD &amp; Pricing">
+                            <group>
+                                <group string="COD">
+                                    <field name="cod_amount"/>
+                                    <field name="original_cod_amount"/>
+                                </group>
+                                <group string="Bosta Pricing Storage">
+                                    <field name="shipment_fees"/>
+                                    <field name="shipping_fee"/>
+                                    <field name="bundle_discount"/>
+                                    <field name="opening_package_fee"/>
+                                    <field name="bosta_material_fee"/>
+                                    <field name="price_before_vat"/>
+                                    <field name="price_after_vat"/>
+                                    <field name="vat_rate"/>
+                                    <field name="pricing_currency_code"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="Returns">
+                            <group>
+                                <field name="original_delivery_id" domain="[('company_id', '=', company_id), ('id', '!=', id)]"/>
+                                <field name="return_delivery_ids" readonly="1">
+                                    <list>
+                                        <field name="tracking_number"/>
+                                        <field name="delivery_type_value"/>
+                                        <field name="flow_type"/>
+                                        <field name="state_value"/>
+                                    </list>
+                                </field>
+                            </group>
+                        </page>
+
+                        <page string="Items">
+                            <field name="item_ids">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="bosta_product_info_id" optional="hide"/>
+                                    <field name="external_product_id"/>
+                                    <field name="title"/>
+                                    <field name="quantity"/>
+                                    <field name="product_type" optional="show"/>
+                                    <field name="options_string" optional="hide"/>
+                                    <field name="company_id" column_invisible="True"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_bosta_delivery" model="ir.actions.act_window">
+        <field name="name">Deliveries</field>
+        <field name="res_model">bosta.delivery</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_bosta_delivery_search"/>
+    </record>
+
+    <menuitem
+        id="menu_bosta_delivery"
+        name="Deliveries"
+        parent="menu_bosta_integration_root"
+        action="action_bosta_delivery"
+        sequence="5"
+        groups="bosta_integration.group_bosta_integration_user"
+    />
+</odoo>

@@ -104,7 +104,7 @@
         id="menu_bosta_integration_root"
         name="Bosta Integration"
         sequence="30"
-        groups="bosta_integration.group_bosta_integration_manager"
+        groups="bosta_integration.group_bosta_integration_user"
     />
 
     <menuitem
