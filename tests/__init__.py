@@ -11,3 +11,6 @@ from . import test_api_normalization
 from . import test_api_extraction
 from . import test_phase4_baseline
 from . import test_real_bosta_payload_shapes
+from . import test_persistence_service
+from . import test_sync_service
+from . import test_phase5_baseline

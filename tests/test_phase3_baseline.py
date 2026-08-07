@@ -21,7 +21,7 @@ class TestBostaPhase3Baseline(TransactionCase):
 
     def test_manifest_is_phase3_and_stays_independent(self):
         manifest = get_manifest("bosta_integration")
-        self.assertEqual(manifest["version"], "18.0.6.0.0")
+        self.assertEqual(manifest["version"], "18.0.7.0.0")
         self.assertEqual(manifest.get("depends"), ["base"])
         for forbidden in ("sale", "stock", "account", "website"):
             self.assertNotIn(forbidden, manifest.get("depends", []))
@@ -71,8 +71,6 @@ class TestBostaPhase3Baseline(TransactionCase):
             for path in sorted((module_path / "security").glob("*.xml"))
         )
         self.assertNotIn('model="ir.cron"', xml_text + security_text)
-        self.assertNotIn('string="sync', xml_text)
-        self.assertNotIn('name="action_sync', xml_text)
 
     def test_phase3_runtime_contains_no_sale_stock_profit_or_sync_logic(self):
         module_path = Path(get_module_path("bosta_integration"))

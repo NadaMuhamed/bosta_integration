@@ -66,3 +66,22 @@ class BostaDeliveryNormalizationError(BostaApiContractError):
     """Safe Phase 4 normalization/merge contract failure."""
 
     default_message = "Bosta delivery data could not be normalized safely."
+
+
+class BostaPersistenceError(Exception):
+    """Base safe Phase 5 persistence error; never embeds payload/PII."""
+
+    default_message = "Bosta delivery data could not be persisted safely."
+
+    def __init__(self, message=None):
+        safe_message = message or self.default_message
+        super().__init__(safe_message)
+        self.safe_message = safe_message
+
+
+class BostaPersistenceDataError(BostaPersistenceError):
+    default_message = "Normalized Bosta delivery data is invalid for persistence."
+
+
+class BostaPersistenceIdentityConflict(BostaPersistenceError):
+    default_message = "Conflicting Bosta delivery identities"

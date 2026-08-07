@@ -1,7 +1,7 @@
 {
     "name": "Bosta Integration",
-    "version": "18.0.6.0.0",
-    "summary": "Bosta API extraction and pure delivery normalization foundation",
+    "version": "18.0.7.0.0",
+    "summary": "Bosta delivery persistence and idempotent manual synchronization",
     "description": """
 Bosta Integration
 =================
@@ -18,9 +18,14 @@ schema, company-safe access controls, and inspection views.
 
 Phase 4 adds pure Search/Details extraction orchestration, safe delivery/product/
 pricing/timeline normalization, partial-update merge semantics, and protection
-against unreliable pagination counts. Persistence/upsert, partner/order/product
-creation, stock behavior, return lifecycle interpretation, profit/accounting,
-settlements, and scheduled jobs remain intentionally deferred.
+against unreliable pagination counts.
+
+Phase 5 adds company-safe, idempotent persistence/upsert of normalized Bosta
+records, deterministic delivery-item reconciliation, conservative stale-update
+protection, safe manual manager synchronization, operational audit fields, and
+advisory locking. Partner/order/product creation, stock behavior, return/lifecycle
+interpretation, profit/accounting, settlements, and scheduled jobs remain
+intentionally deferred.
     """,
     "category": "Technical",
     "author": "My Company",

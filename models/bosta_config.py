@@ -1,13 +1,16 @@
+import hashlib
 import logging
 import os
 import re
 from urllib.parse import urlparse
 
 from odoo import _, api, fields, models
-from odoo.exceptions import AccessError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 
 from ..services.bosta_api_client import BostaApiClient
-from ..services.exceptions import BostaApiError
+from ..services.bosta_extraction_service import BostaExtractionService
+from ..services.bosta_persistence_service import BostaPersistenceService
+from ..services.exceptions import BostaApiError, BostaPersistenceError
 
 
 _logger = logging.getLogger(__name__)
@@ -39,12 +42,31 @@ _SAFE_STATUS_MESSAGES = {
     "server_error": "The Bosta API is temporarily unavailable.",
     "unknown_error": "The Bosta API request failed safely.",
 }
+_SYNC_STATUS_VALUES = [
+    ("never", "Never"),
+    ("running", "Running"),
+    ("success", "Success"),
+    ("partial", "Partial"),
+    ("failed", "Failed"),
+]
+_SYNC_AUDIT_FIELDS = {
+    "last_sync_started_at",
+    "last_sync_completed_at",
+    "last_sync_status",
+    "last_sync_seen_count",
+    "last_sync_created_count",
+    "last_sync_updated_count",
+    "last_sync_unchanged_count",
+    "last_sync_conflict_count",
+    "last_sync_error_count",
+    "last_sync_error",
+}
 _PROTECTED_API_STATE_FIELDS = {
     "api_status",
     "last_api_test_at",
     "last_successful_api_request_at",
     "last_api_error",
-}
+} | _SYNC_AUDIT_FIELDS
 
 
 class BostaIntegrationConfig(models.Model):
@@ -136,6 +158,23 @@ class BostaIntegrationConfig(models.Model):
         copy=False,
     )
 
+    last_sync_started_at = fields.Datetime(string="Last Sync Started", readonly=True, copy=False)
+    last_sync_completed_at = fields.Datetime(string="Last Sync Completed", readonly=True, copy=False)
+    last_sync_status = fields.Selection(
+        selection=_SYNC_STATUS_VALUES,
+        string="Last Sync Status",
+        default="never",
+        readonly=True,
+        copy=False,
+    )
+    last_sync_seen_count = fields.Integer(string="Last Sync Seen", readonly=True, copy=False)
+    last_sync_created_count = fields.Integer(string="Last Sync Created", readonly=True, copy=False)
+    last_sync_updated_count = fields.Integer(string="Last Sync Updated", readonly=True, copy=False)
+    last_sync_unchanged_count = fields.Integer(string="Last Sync Unchanged", readonly=True, copy=False)
+    last_sync_conflict_count = fields.Integer(string="Last Sync Conflicts", readonly=True, copy=False)
+    last_sync_error_count = fields.Integer(string="Last Sync Errors", readonly=True, copy=False)
+    last_sync_error = fields.Text(string="Last Sync Error", readonly=True, copy=False)
+
     _sql_constraints = [
         (
             "bosta_config_company_unique",
@@ -197,7 +236,7 @@ class BostaIntegrationConfig(models.Model):
     @api.model
     def _ensure_no_external_api_state_fields(self, vals):
         if _PROTECTED_API_STATE_FIELDS.intersection(vals):
-            raise AccessError(_("Bosta API status fields can only be changed by integration controls."))
+            raise AccessError(_("Bosta operational status fields can only be changed by integration controls."))
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -363,3 +402,152 @@ class BostaIntegrationConfig(models.Model):
                 "sticky": False,
             },
         }
+
+    def _write_sync_state(self, vals):
+        self.ensure_one()
+        safe_vals = {key: value for key, value in vals.items() if key in _SYNC_AUDIT_FIELDS}
+        return super(BostaIntegrationConfig, self).write(safe_vals)
+
+    def _sync_lock_key(self):
+        self.ensure_one()
+        material = f"bosta-sync:{self.env.cr.dbname}:{self.id}".encode("utf-8")
+        # PostgreSQL's single-key advisory-lock API accepts signed bigint.  A
+        # deterministic 63-bit digest avoids permanent flags and avoids
+        # cross-database/config collisions without exposing company data.
+        return int.from_bytes(hashlib.sha256(material).digest()[:8], "big") & 0x7FFFFFFFFFFFFFFF
+
+    def _try_acquire_sync_lock(self):
+        self.ensure_one()
+        self.env.cr.execute(
+            "SELECT pg_try_advisory_lock(%s)",
+            (self._sync_lock_key(),),
+        )
+        row = self.env.cr.fetchone()
+        return bool(row and row[0])
+
+    def _release_sync_lock(self):
+        self.ensure_one()
+        self.env.cr.execute(
+            "SELECT pg_advisory_unlock(%s)",
+            (self._sync_lock_key(),),
+        )
+
+    @api.model
+    def _sync_summary_state_values(self, summary, *, status, error=False, completed_at=None):
+        return {
+            "last_sync_completed_at": completed_at or fields.Datetime.now(),
+            "last_sync_status": status,
+            "last_sync_seen_count": summary.get("seen", 0),
+            "last_sync_created_count": summary.get("created", 0),
+            "last_sync_updated_count": summary.get("updated", 0),
+            "last_sync_unchanged_count": summary.get("unchanged", 0),
+            "last_sync_conflict_count": summary.get("conflicts", 0),
+            "last_sync_error_count": summary.get("errors", 0),
+            "last_sync_error": error or False,
+        }
+
+    @api.model
+    def _sync_notification(self, summary, *, status, message=None):
+        if message is None:
+            message = _(
+                "Bosta sync completed:\nSeen: %(seen)s\nCreated: %(created)s\n"
+                "Updated: %(updated)s\nUnchanged: %(unchanged)s\n"
+                "Conflicts: %(conflicts)s\nErrors: %(errors)s"
+            ) % summary
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": _("Bosta Delivery Sync"),
+                "message": message,
+                "type": "success" if status == "success" else ("warning" if status == "partial" else "danger"),
+                "sticky": status != "success",
+            },
+        }
+
+    def action_sync_bosta_deliveries(self):
+        self._ensure_manager_action_access()
+        if not self.integration_enabled:
+            raise UserError(_("Enable the Bosta integration before synchronization."))
+        env_name = self.api_key_env_var or ""
+        api_key = os.environ.get(env_name) if _ENV_VAR_RE.fullmatch(env_name) else None
+        if not isinstance(api_key, str) or not api_key.strip():
+            raise UserError(_("Configure the Bosta API key in the server environment before synchronization."))
+        if not self._try_acquire_sync_lock():
+            raise UserError(_("A Bosta synchronization is already running for this configuration."))
+
+        try:
+            summary = BostaPersistenceService.empty_summary()
+            started_at = fields.Datetime.now()
+            self._write_sync_state({
+                "last_sync_started_at": started_at,
+                "last_sync_completed_at": False,
+                "last_sync_status": "running",
+                "last_sync_seen_count": 0,
+                "last_sync_created_count": 0,
+                "last_sync_updated_count": 0,
+                "last_sync_unchanged_count": 0,
+                "last_sync_conflict_count": 0,
+                "last_sync_error_count": 0,
+                "last_sync_error": False,
+            })
+            client = self._build_api_client()
+            extraction = BostaExtractionService(client)
+            persistence = BostaPersistenceService(self.env)
+            try:
+                persistence.persist_search_deliveries(
+                    extraction,
+                    self.company_id,
+                    page_size=self.page_size,
+                    max_pages=self.max_pages,
+                    summary=summary,
+                )
+            except BostaApiError as exc:
+                safe_error = self._safe_status_message(getattr(exc, "status", "unknown_error"))
+                self._write_sync_state(
+                    self._sync_summary_state_values(
+                        summary,
+                        status="failed",
+                        error=safe_error,
+                    )
+                )
+                _logger.warning(
+                    "Bosta delivery sync failed safely for company %s with status %s",
+                    self.company_id.id,
+                    getattr(exc, "status", "unknown_error"),
+                )
+                return self._sync_notification(
+                    summary,
+                    status="failed",
+                    message=_("Bosta sync failed safely. Previously processed valid records were preserved."),
+                )
+            except BostaPersistenceError:
+                safe_error = _("Bosta delivery persistence failed safely.")
+                self._write_sync_state(
+                    self._sync_summary_state_values(summary, status="failed", error=safe_error)
+                )
+                _logger.warning(
+                    "Bosta delivery persistence failed safely for company %s",
+                    self.company_id.id,
+                )
+                return self._sync_notification(summary, status="failed", message=safe_error)
+
+            status = "partial" if summary["conflicts"] or summary["errors"] else "success"
+            safe_error = _("Some Bosta deliveries could not be persisted safely.") if status == "partial" else False
+            self._write_sync_state(
+                self._sync_summary_state_values(summary, status=status, error=safe_error)
+            )
+            _logger.info(
+                "Bosta delivery sync completed for company %s: seen=%s created=%s updated=%s unchanged=%s conflicts=%s errors=%s",
+                self.company_id.id,
+                summary["seen"],
+                summary["created"],
+                summary["updated"],
+                summary["unchanged"],
+                summary["conflicts"],
+                summary["errors"],
+            )
+            return self._sync_notification(summary, status=status)
+        finally:
+            self._release_sync_lock()
+

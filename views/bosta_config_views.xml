@@ -30,6 +30,13 @@
                         class="btn-primary"
                         groups="bosta_integration.group_bosta_integration_manager"
                     />
+                    <button
+                        name="action_sync_bosta_deliveries"
+                        type="object"
+                        string="Sync Bosta Deliveries"
+                        groups="bosta_integration.group_bosta_integration_manager"
+                        invisible="not integration_enabled"
+                    />
                 </header>
                 <sheet>
                     <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
@@ -66,6 +73,23 @@
                         <group>
                             <field name="last_successful_api_request_at" readonly="1"/>
                             <field name="last_api_error" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <group string="Delivery Sync Status">
+                        <group>
+                            <field name="last_sync_status" readonly="1"/>
+                            <field name="last_sync_started_at" readonly="1"/>
+                            <field name="last_sync_completed_at" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="last_sync_seen_count" readonly="1"/>
+                            <field name="last_sync_created_count" readonly="1"/>
+                            <field name="last_sync_updated_count" readonly="1"/>
+                            <field name="last_sync_unchanged_count" readonly="1"/>
+                            <field name="last_sync_conflict_count" readonly="1"/>
+                            <field name="last_sync_error_count" readonly="1"/>
+                            <field name="last_sync_error" readonly="1"/>
                         </group>
                     </group>
 

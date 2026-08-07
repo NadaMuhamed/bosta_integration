@@ -80,13 +80,11 @@ class TestBostaPhase4Baseline(TransactionCase):
 
     def test_phase4_manifest_and_boundary(self):
         manifest = get_manifest("bosta_integration")
-        self.assertEqual(manifest["version"], "18.0.6.0.0")
+        self.assertEqual(manifest["version"], "18.0.7.0.0")
         self.assertEqual(manifest.get("depends"), ["base"])
         module_path = Path(get_module_path("bosta_integration"))
         xml = "\n".join(path.read_text(encoding="utf-8").lower() for path in sorted((module_path / "views").glob("*.xml")))
         self.assertNotIn('model="ir.cron"', xml)
-        self.assertNotIn('string="sync', xml)
-        self.assertNotIn('name="action_sync', xml)
 
     def test_phase4_no_raw_payload_fields_and_no_orm_in_services(self):
         forbidden_fields = {"raw_payload", "raw_json", "search_payload", "details_payload", "timeline_json"}
