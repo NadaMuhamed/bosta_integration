@@ -269,7 +269,14 @@ class BostaApiClient:
         return hashlib.sha256(material).hexdigest()
 
     @staticmethod
-    def _pagination_says_last(payload, page):
+    def _pagination_says_last(payload, page, *, page_count=None, limit=None):
+        """Return True only for internally consistent completion metadata.
+
+        Bosta has been observed returning a full page while also reporting
+        ``count = 0``.  A contradictory count makes completion metadata from
+        the same response untrustworthy, so a full page must continue until a
+        short/empty page or separately consistent metadata proves completion.
+        """
         if not isinstance(payload, dict):
             return False
         candidates = []
@@ -279,6 +286,30 @@ class BostaApiClient:
             candidates.append(data)
         candidates.append(payload.get("pagination"))
         candidates.append(payload)
+
+        full_page = (
+            isinstance(page_count, int)
+            and isinstance(limit, int)
+            and page_count >= limit
+        )
+        contradictory_count = False
+        if full_page:
+            for container in (data, payload):
+                if not isinstance(container, dict):
+                    continue
+                for key in ("count", "total", "totalCount", "total_count"):
+                    value = container.get(key)
+                    if isinstance(value, int) and not isinstance(value, bool):
+                        # Any advertised total smaller than the records already
+                        # returned on this page is self-contradictory.
+                        if value < page_count:
+                            contradictory_count = True
+                            break
+                if contradictory_count:
+                    break
+
+        if contradictory_count:
+            return False
 
         for meta in candidates:
             if not isinstance(meta, dict):
@@ -376,7 +407,9 @@ class BostaApiClient:
                     "Bosta delivery pagination made no progress."
                 )
 
-            if len(deliveries) < limit or self._pagination_says_last(payload, page):
+            if len(deliveries) < limit or self._pagination_says_last(
+                payload, page, page_count=len(deliveries), limit=limit
+            ):
                 return
 
         raise BostaApiPaginationError("Bosta delivery pagination reached the configured safety limit.")

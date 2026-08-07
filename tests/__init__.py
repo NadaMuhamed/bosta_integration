@@ -7,3 +7,7 @@ from . import test_configuration_security
 from . import test_delivery_models
 from . import test_delivery_security
 from . import test_phase3_baseline
+from . import test_api_normalization
+from . import test_api_extraction
+from . import test_phase4_baseline
+from . import test_real_bosta_payload_shapes

@@ -60,3 +60,9 @@ class BostaApiContractError(BostaApiError):
 
 class BostaApiPaginationError(BostaApiContractError):
     default_message = "Bosta delivery pagination did not progress safely."
+
+
+class BostaDeliveryNormalizationError(BostaApiContractError):
+    """Safe Phase 4 normalization/merge contract failure."""
+
+    default_message = "Bosta delivery data could not be normalized safely."

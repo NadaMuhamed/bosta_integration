@@ -178,3 +178,30 @@ class TestBostaApiPagination(TestCase):
         result = client.get_all_deliveries()
         self.assertEqual(len(result), 4)
         self.assertEqual([call[2]["json"]["limit"] for call in transport.calls], [3, 3])
+
+    def test_full_page_ignores_unreliable_zero_count(self):
+        first = [delivery(index) for index in range(200)]
+        second = [delivery(200)]
+        client, transport = self.client(
+            [
+                payload(first, count=0, pagination={"currentPage": 1, "totalPages": 1, "hasNext": False}),
+                payload(second, count=0),
+            ],
+            page_size=200,
+        )
+        result = client.get_all_deliveries()
+        self.assertEqual(len(result), 201)
+        self.assertEqual([call[2]["json"]["page"] for call in transport.calls], [1, 2])
+
+    def test_full_1500_page_with_unreliable_count_still_continues(self):
+        first = [delivery(index) for index in range(1500)]
+        second = [delivery(1500)]
+        client, transport = self.client(
+            [
+                payload(first, count=0, pagination={"currentPage": 1, "totalPages": 1}),
+                payload(second, count=0),
+            ]
+        )
+        result = client.get_all_deliveries()
+        self.assertEqual(len(result), 1501)
+        self.assertEqual([call[2]["json"]["page"] for call in transport.calls], [1, 2])

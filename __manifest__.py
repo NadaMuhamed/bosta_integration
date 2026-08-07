@@ -1,7 +1,7 @@
 {
     "name": "Bosta Integration",
-    "version": "18.0.5.0.0",
-    "summary": "Secure Bosta API foundation with persistent delivery models",
+    "version": "18.0.6.0.0",
+    "summary": "Bosta API extraction and pure delivery normalization foundation",
     "description": """
 Bosta Integration
 =================
@@ -14,9 +14,13 @@ and redacted error handling.
 
 Phase 3 adds source-agnostic persistent Bosta delivery and delivery-item models,
 raw delivery type/state storage, normalized flow classification, return-link
-schema, company-safe access controls, and inspection views. Synchronization,
-partner/order/product creation, stock behavior, return lifecycle interpretation,
-profit/accounting, settlements, and scheduled jobs remain intentionally deferred.
+schema, company-safe access controls, and inspection views.
+
+Phase 4 adds pure Search/Details extraction orchestration, safe delivery/product/
+pricing/timeline normalization, partial-update merge semantics, and protection
+against unreliable pagination counts. Persistence/upsert, partner/order/product
+creation, stock behavior, return lifecycle interpretation, profit/accounting,
+settlements, and scheduled jobs remain intentionally deferred.
     """,
     "category": "Technical",
     "author": "My Company",
