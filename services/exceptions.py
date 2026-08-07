@@ -1,61 +1,62 @@
-"""Safe exception hierarchy for Bosta Dashboard authentication."""
+"""Safe exception hierarchy for the Bosta HTTP API integration."""
 
 
-class BostaDashboardError(Exception):
-    """Base error carrying only a safe user-facing category and message."""
+class BostaApiError(Exception):
+    """Base error containing only a safe category and user-facing message."""
 
     status = "unknown_error"
-    default_message = "Bosta Dashboard authentication could not be completed safely."
+    default_message = "The Bosta API request could not be completed safely."
 
     def __init__(self, message=None):
-        super().__init__(message or self.default_message)
-        self.safe_message = message or self.default_message
+        safe_message = message or self.default_message
+        super().__init__(safe_message)
+        self.safe_message = safe_message
 
 
-class BostaAuthenticationError(BostaDashboardError):
-    default_message = "Bosta Dashboard authentication configuration is incomplete."
+class BostaApiConfigurationError(BostaApiError):
+    status = "not_configured"
+    default_message = "The Bosta API configuration is incomplete."
 
 
-class BostaInvalidCredentialsError(BostaDashboardError):
-    status = "invalid_credentials"
-    default_message = "The Bosta Dashboard login or password was rejected."
+class BostaApiAuthenticationError(BostaApiError):
+    status = "authentication_failed"
+    default_message = "Bosta API authentication failed."
 
 
-class BostaOtpRequiredError(BostaDashboardError):
-    status = "otp_required"
-    default_message = "Bosta Dashboard requires a one-time verification code."
+class BostaApiPermissionError(BostaApiError):
+    status = "permission_denied"
+    default_message = "The Bosta API key does not have permission for this operation."
 
 
-class BostaCaptchaRequiredError(BostaDashboardError):
-    status = "captcha_required"
-    default_message = "Bosta Dashboard requires CAPTCHA verification."
+class BostaApiNotFoundError(BostaApiError):
+    status = "contract_error"
+    default_message = "The requested Bosta delivery was not found."
 
 
-class BostaBlockedError(BostaDashboardError):
-    status = "blocked"
-    default_message = "Bosta Dashboard has blocked this authentication attempt."
+class BostaApiRateLimitError(BostaApiError):
+    status = "rate_limited"
+    default_message = "The Bosta API rate limit was reached."
 
 
-class BostaSessionExpiredError(BostaDashboardError):
-    status = "expired"
-    default_message = "The saved Bosta Dashboard session has expired."
-
-
-class BostaBrowserUnavailableError(BostaDashboardError):
-    status = "browser_unavailable"
-    default_message = "Chromium is unavailable in the Odoo server environment."
-
-
-class BostaDashboardConnectionError(BostaDashboardError):
+class BostaApiConnectionError(BostaApiError):
     status = "connection_failed"
-    default_message = "The Odoo server could not reach the Bosta Dashboard safely."
+    default_message = "The Odoo server could not reach the Bosta API."
 
 
-class BostaLoginPageChangedError(BostaDashboardError):
-    status = "contract_changed"
-    default_message = "The Bosta Dashboard login page structure is no longer recognized."
+class BostaApiTimeoutError(BostaApiError):
+    status = "timeout"
+    default_message = "The Bosta API request timed out."
 
 
-class BostaSessionStateError(BostaDashboardError):
-    status = "expired"
-    default_message = "The saved Bosta Dashboard session is invalid or unreadable."
+class BostaApiServerError(BostaApiError):
+    status = "server_error"
+    default_message = "The Bosta API is temporarily unavailable."
+
+
+class BostaApiContractError(BostaApiError):
+    status = "contract_error"
+    default_message = "The Bosta API returned an unexpected response format."
+
+
+class BostaApiPaginationError(BostaApiContractError):
+    default_message = "Bosta delivery pagination did not progress safely."

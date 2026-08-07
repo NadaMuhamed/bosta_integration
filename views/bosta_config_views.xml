@@ -9,9 +9,8 @@
                 <field name="name"/>
                 <field name="company_id" groups="base.group_multi_company"/>
                 <field name="integration_enabled"/>
-                <field name="dashboard_password_configured"/>
-                <field name="session_status"/>
-                <field name="session_configured"/>
+                <field name="api_key_configured"/>
+                <field name="api_status"/>
                 <field name="active" optional="hide"/>
             </list>
         </field>
@@ -25,33 +24,16 @@
             <form string="Bosta Integration Configuration">
                 <header>
                     <button
-                        name="action_test_dashboard_login"
+                        name="action_test_api_connection"
                         type="object"
-                        string="Test Login"
+                        string="Test API Connection"
                         class="btn-primary"
                         groups="bosta_integration.group_bosta_integration_manager"
-                    />
-                    <button
-                        name="action_reset_dashboard_session"
-                        type="object"
-                        string="Reset Dashboard Session"
-                        class="btn-secondary"
-                        groups="bosta_integration.group_bosta_integration_manager"
-                        confirm="Reset only the saved browser session? The saved Dashboard password will be kept."
-                        invisible="not session_configured"
-                    />
-                    <button
-                        name="action_clear_saved_password"
-                        type="object"
-                        string="Clear Saved Password"
-                        class="btn-secondary"
-                        groups="bosta_integration.group_bosta_integration_manager"
-                        confirm="Clear the saved Bosta Dashboard password and disable the integration?"
-                        invisible="not dashboard_password_configured"
                     />
                 </header>
                 <sheet>
                     <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
+
                     <group string="General">
                         <group>
                             <field name="name"/>
@@ -63,39 +45,32 @@
                         </group>
                     </group>
 
-                    <group string="Bosta Dashboard Credentials">
+                    <group string="Bosta API">
                         <group>
-                            <field name="dashboard_url" placeholder="https://business.bosta.co/orders"/>
-                            <field name="dashboard_login"/>
-                            <field
-                                name="dashboard_password_input"
-                                password="True"
-                                placeholder="Enter a new password"
-                            />
+                            <field name="api_base_url" placeholder="https://app.bosta.co"/>
+                            <field name="api_key_env_var" placeholder="BOSTA_API_KEY"/>
+                            <field name="api_key_configured" readonly="1"/>
                         </group>
                         <group>
-                            <field name="dashboard_password_configured" readonly="1"/>
-                            <field name="credentials_updated_at" readonly="1"/>
-                            <field name="credentials_updated_by" readonly="1"/>
+                            <field name="request_timeout_seconds"/>
+                            <field name="page_size"/>
+                            <field name="max_pages"/>
                         </group>
                     </group>
 
-                    <group string="Authentication Session">
+                    <group string="API Status">
                         <group>
-                            <field name="session_status" readonly="1"/>
-                            <field name="session_configured" readonly="1"/>
-                            <field name="browser_timeout_seconds"/>
+                            <field name="api_status" readonly="1"/>
+                            <field name="last_api_test_at" readonly="1"/>
                         </group>
                         <group>
-                            <field name="last_login_attempt_at" readonly="1"/>
-                            <field name="last_successful_login_at" readonly="1"/>
-                            <field name="last_session_validation_at" readonly="1"/>
-                            <field name="last_auth_error" readonly="1"/>
+                            <field name="last_successful_api_request_at" readonly="1"/>
+                            <field name="last_api_error" readonly="1"/>
                         </group>
                     </group>
 
                     <div class="text-muted">
-                        Password and browser-session data are encrypted with a server-provided key. The password input is empty whenever this form is reopened, and cookies or storage-state contents are never displayed.
+                        The API key is read from the server environment and is never stored in Odoo.
                     </div>
                 </sheet>
             </form>
@@ -111,8 +86,8 @@
                 <field name="name"/>
                 <field name="company_id" groups="base.group_multi_company"/>
                 <filter name="enabled" string="Enabled" domain="[('integration_enabled', '=', True)]"/>
-                <filter name="password_configured" string="Password Configured" domain="[('dashboard_password_configured', '=', True)]"/>
-                <filter name="session_authenticated" string="Authenticated Session" domain="[('session_status', '=', 'authenticated')]"/>
+                <filter name="api_connected" string="API Connected" domain="[('api_status', '=', 'connected')]"/>
+                <filter name="api_not_configured" string="API Not Configured" domain="[('api_status', '=', 'not_configured')]"/>
                 <filter name="inactive" string="Archived" domain="[('active', '=', False)]"/>
             </search>
         </field>

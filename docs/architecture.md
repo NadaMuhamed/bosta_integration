@@ -1,76 +1,95 @@
-# Bosta Integration Architecture
+# Bosta Integration Architecture — Phase 2R
 
-## Module identity
+## Scope
 
-- **Technical module name:** `bosta_integration`
-- **Configuration model:** `bosta.integration.config`
-- **Target platform:** Odoo 18
-- **Dashboard entry point:** `https://business.bosta.co/orders`
+`bosta_integration` is an independent Odoo 18 module. Phase 2R replaces the old
+browser-based Bosta Dashboard authentication architecture with direct Bosta API
+access.
 
-## Purpose and independence
-
-`bosta_integration` is an independent module. The legacy `bosta_orders` module
-is reference-only and is not a runtime dependency.
-
-The module:
-
-- does not depend on `bosta_orders`;
-- does not import from `odoo.addons.bosta_orders`;
-- does not reuse the legacy module at runtime; and
-- must install when the legacy module is absent.
-
-## Completed scope
-
-### Phase 0 — Baseline
-
-Phase 0 established the independent module skeleton, minimal `base` dependency,
-company-scoped configuration model, clean package imports, namespace checks,
-and planning documentation.
-
-### Phase 1 — Configuration and security
-
-Phase 1 added company-specific Dashboard configuration, Fernet password
-encryption, credential audit fields, least-privilege groups, manager-only ACLs,
-and allowed-company isolation.
-
-### Phase 2 — Authentication and encrypted session lifecycle
-
-Phase 2 adds:
-
-- synchronous Playwright Chromium lifecycle management outside model methods;
-- one saved-session validation followed by at most one fresh login attempt;
-- conservative English/Arabic login locator candidates;
-- multi-signal authenticated-page validation;
-- encrypted Playwright storage-state persistence in PostgreSQL;
-- manager-only Test Login and Reset Dashboard Session actions;
-- safe status and timestamp fields;
-- fail-closed OTP, CAPTCHA, blocked-account, connection, browser, and contract
-  handling; and
-- mocked automated tests with no real Bosta requests.
-
-Phase 2 does **not** read the order table or extract order details.
-
-## Runtime architecture
+Runtime flow:
 
 ```text
 bosta.integration.config
         ↓
-DashboardAuthService
+BostaApiClient
         ↓
-DashboardSessionService
+https://app.bosta.co
         ↓
-BrowserFactory
-        ↓
-Playwright Chromium
+Bosta API
 ```
 
-The model performs access checks and controlled writes. It contains no direct
-Playwright navigation or locator logic.
+Phase 2R intentionally does not create Odoo orders, customers, sale orders,
+stock movements, returns, profit records, or scheduled synchronization jobs.
 
-## Future phases
+## Configuration
 
-1. **Phase 3 — Order discovery and parsing:** only after separate approval.
-2. **Later approved phases:** customer/product matching, sales documents,
-   inventory, returns, accounting, reconciliation, profit, and scheduled jobs.
+The configuration model remains `bosta.integration.config` and remains scoped to
+one record per company. Only Bosta Integration Managers can access configuration
+records, and the existing company record rule continues to isolate records by
+allowed companies.
 
-None of those future-phase services or models are implemented in Phase 2.
+API configuration fields:
+
+- `api_base_url` — restricted to `https://app.bosta.co`.
+- `api_key_env_var` — stores only the environment variable name.
+- `api_key_configured` — non-stored boolean indicating whether that variable is
+  currently populated.
+- `request_timeout_seconds` — bounded request timeout.
+- `page_size` — bounded to 1..1500.
+- `max_pages` — pagination safety cap.
+
+## API client
+
+`services/bosta_api_client.py` owns HTTP transport responsibilities only:
+
+- environment-only API key lookup at request time;
+- request headers and URLs;
+- POST delivery search;
+- GET delivery details;
+- JSON and basic contract validation;
+- bounded retries for temporary failures;
+- safe exception mapping;
+- full-delivery pagination with loop protection and de-duplication.
+
+The client supports injected HTTP transport and sleep functions so automated
+tests never require the live Bosta API and never wait for real retry backoff.
+
+## Pagination
+
+Search starts at page 1 and uses the configured page size, up to 1500. Pagination
+stops when any reliable completion condition is reached:
+
+1. the API returns an empty delivery list;
+2. the returned delivery count is less than the requested limit; or
+3. reliable pagination metadata explicitly indicates the final page.
+
+A full page is never treated as the historical end. If page 1 returns exactly
+1500 deliveries, page 2 is requested, and so on.
+
+Safety controls include:
+
+- configured maximum pages;
+- repeated-page fingerprint detection;
+- de-duplication by `_id`, then `trackingNumber`;
+- deterministic preservation of the first occurrence seen.
+
+If pagination clearly stops progressing, the client raises a safe pagination
+error instead of silently returning a falsely complete result.
+
+## Delivery details
+
+Delivery details use:
+
+```text
+GET /api/v2/deliveries/business/{tracking_number}
+```
+
+Tracking numbers are treated as text and safely URL-encoded. Phase 2R validates
+only the basic response envelope and returns the delivery payload; full Bosta
+business-field normalization belongs to a later phase.
+
+## Upgrade
+
+Version `18.0.4.0.0` includes a post-migration that removes obsolete stored
+Dashboard credential/session columns using a fixed allow-list. The migration is
+idempotent and does not read or print old encrypted values.

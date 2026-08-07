@@ -1,25 +1,25 @@
 {
     "name": "Bosta Integration",
-    "version": "18.0.3.0.0",
-    "summary": "Secure Bosta Dashboard authentication and encrypted browser sessions",
+    "version": "18.0.4.0.0",
+    "summary": "Secure Bosta API configuration, client, pagination, and connection testing",
     "description": """
 Bosta Integration
 =================
 
-Independent Odoo 18 module for secure Bosta Business Dashboard authentication.
-Phase 2 adds Playwright Chromium lifecycle management, conservative Dashboard
-login detection, encrypted browser storage-state persistence, saved-session
-validation, manager-only authentication controls, and safe status reporting.
-Order extraction, synchronization, product mapping, sales, inventory, returns,
-accounting, settlements, profit, and scheduled jobs are intentionally excluded.
+Independent Odoo 18 foundation for direct Bosta API integration. Phase 2R
+provides environment-only API-key configuration, a safe HTTP client, bounded
+retry handling, paginated delivery retrieval, delivery-detail retrieval,
+manager-only API connection testing, multi-company configuration isolation,
+and redacted error handling.
+
+Order records, sales, inventory, returns, profit calculation, scheduled
+synchronization, and other Phase 3+ business behavior are intentionally
+excluded from this phase.
     """,
     "category": "Technical",
     "author": "My Company",
     "license": "LGPL-3",
     "depends": ["base"],
-    "external_dependencies": {
-        "python": ["cryptography", "playwright"],
-    },
     "data": [
         "security/bosta_security.xml",
         "security/ir.model.access.csv",

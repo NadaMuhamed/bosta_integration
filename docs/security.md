@@ -1,67 +1,70 @@
-# Bosta Integration Security
+# Bosta Integration Security — Phase 2R
 
-## Encryption boundary
+## API key boundary
 
-Dashboard passwords and Playwright storage state are encrypted with
-`cryptography.fernet.Fernet`. The key is read only from:
+The Bosta API key is never persisted by Odoo.
 
-`BOSTA_DASHBOARD_ENCRYPTION_KEY`
+```text
+BOSTA_API_KEY
+    ↓ environment only
+BostaApiClient
+    ↓
+Authorization header
+    ↓
+Bosta API
+```
 
-The key is not stored in PostgreSQL, Odoo system parameters, source control,
-logs, screenshots, or browser traces.
+The configuration stores only the environment variable name (default
+`BOSTA_API_KEY`). Multi-company installations may configure a different
+non-secret variable name for another company.
 
-## Password lifecycle
+The key must never be stored in PostgreSQL, `ir.config_parameter`, model fields,
+notifications, logs, exceptions, raw response storage, fixtures, screenshots, or
+documentation. The non-stored `api_key_configured` field exposes only whether a
+non-empty value currently exists.
 
-- `dashboard_password_input` is non-stored and masked.
-- Non-empty input is encrypted before record persistence.
-- Blank input keeps the current encrypted password.
-- Plaintext exists only as a temporary local variable immediately before form
-  filling.
-- Plaintext is not returned by a service, stored in a field, logged, added to an
-  exception, traced, or screenshotted.
-- **Clear Saved Password** removes the password and disables the integration.
+## URL and configuration validation
 
-## Session lifecycle
+The base URL is restricted to the official HTTPS origin `https://app.bosta.co`.
+HTTP downgrade, embedded credentials, unexpected ports, paths, query strings,
+fragments, unrelated hosts, and deceptive subdomains are rejected.
 
-- `context.storage_state()` is validated as a JSON-compatible dictionary.
-- Deterministic JSON is encrypted before storage.
-- Only ciphertext is persisted in `encrypted_session_state`.
-- Decrypted storage state is used only to initialize an isolated browser context.
-- Cookies, tokens, authorization headers, and raw storage-state JSON are never
-  included in views, notifications, chatter, or errors.
-- **Reset Dashboard Session** clears only session ciphertext and safe status data;
-  it keeps the configured login, password, and integration-enabled value.
+Environment-variable names are restricted to uppercase letters, digits, and
+underscores and may not start with a digit.
 
-## Protected internal fields
+Request timeout, page size, and maximum page count are bounded to safe values.
+The integration cannot be enabled unless the environment key currently exists.
+If the key later disappears, API calls fail closed with a configuration error.
 
-Normal callers cannot directly write:
+## Error redaction
 
-- `encrypted_dashboard_password`
-- `credentials_updated_at`
-- `credentials_updated_by`
-- `encrypted_session_state`
-- `session_status`
-- `last_login_attempt_at`
-- `last_successful_login_at`
-- `last_session_validation_at`
-- `last_auth_error`
+The API exception hierarchy contains only safe categories/messages. User-facing
+errors and stored `last_api_error` values never contain raw response bodies,
+request headers, the Authorization header, or environment secrets.
 
-Caller-controlled context values do not bypass this protection. Authorized model
-actions use controlled `super().write()` calls only after manager and company
-access checks.
+HTTP errors are mapped to safe categories for authentication failure, permission
+denial, rate limiting, timeout, connection failure, temporary server errors,
+contract errors, and unknown failures.
 
-## Browser safety
+## Retry safety
 
-- Browser automation is outside Odoo model methods.
-- Chromium runs headless in an isolated non-persistent context.
-- Page, context, browser, and Playwright are closed on success and failure.
-- No fixed sleeps are used.
-- Generated classes and arbitrary first-input/button selection are forbidden.
-- OTP and CAPTCHA are detected and reported, never bypassed.
-- The implementation fails closed with `contract_changed` when the login page is
-  not recognized.
+Only temporary failures are retried: HTTP 429, 500, 502, 503, 504, and bounded
+connection failures. Authentication, permission, malformed-contract, and invalid
+configuration failures are not retried blindly.
 
-## Repository exclusions
+Retry count and backoff are bounded. `Retry-After` is accepted only when numeric
+and is capped. Sleep is injectable for deterministic tests.
 
-`.gitignore` excludes local environments, storage-state files, Playwright auth
-profiles, reports, traces, Python caches, and operating-system metadata.
+## Access control and companies
+
+Configuration remains manager-only. The existing allowed-company record rule is
+preserved. Manager actions explicitly verify group membership and write access.
+Ordinary Bosta Integration Users cannot access the configuration model through
+ACLs and cannot invoke Test API Connection.
+
+## Removed browser architecture
+
+Phase 2R contains no active Playwright, Chromium, Dashboard password, password
+encryption, browser storage-state, browser-session, CAPTCHA/OTP automation, or
+Dashboard login service code. Existing stored Dashboard columns are removed by
+the version migration rather than left behind in PostgreSQL.
