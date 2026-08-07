@@ -1,7 +1,7 @@
 {
     "name": "Bosta Integration",
-    "version": "18.0.7.0.0",
-    "summary": "Bosta delivery persistence and idempotent manual synchronization",
+    "version": "18.0.8.0.0",
+    "summary": "Bosta delivery persistence with safe lifecycle interpretation",
     "description": """
 Bosta Integration
 =================
@@ -23,8 +23,12 @@ against unreliable pagination counts.
 Phase 5 adds company-safe, idempotent persistence/upsert of normalized Bosta
 records, deterministic delivery-item reconciliation, conservative stale-update
 protection, safe manual manager synchronization, operational audit fields, and
-advisory locking. Partner/order/product creation, stock behavior, return/lifecycle
-interpretation, profit/accounting, settlements, and scheduled jobs remain
+advisory locking.
+
+Phase 6 adds a pure, deterministic lifecycle interpreter that combines Bosta
+flow, state, timestamps, and completed Details timeline evidence into persisted
+lifecycle inspection fields. Stock, sale orders, customer/product mapping,
+return linkage, profit/accounting, settlements, and scheduled jobs remain
 intentionally deferred.
     """,
     "category": "Technical",

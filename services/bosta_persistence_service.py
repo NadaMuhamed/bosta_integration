@@ -1,10 +1,12 @@
-"""Phase 5 idempotent persistence for normalized Bosta deliveries.
+"""Idempotent persistence for normalized Bosta deliveries.
 
-This service accepts only the Phase 4 normalized envelope.  It deliberately
-contains no HTTP, pagination, normalization, partner/order/product, stock,
-lifecycle, return-linking, or financial/accounting business logic.
+Phase 6 delegates lifecycle interpretation to the pure lifecycle interpreter,
+then persists only the derived lifecycle fields alongside Phase 5 data. This
+service still contains no HTTP, normalization mapping, stock, business-document,
+return-linking, or financial/accounting behavior.
 """
 
+from .bosta_lifecycle_interpreter import BostaLifecycleInterpreter
 from .exceptions import (
     BostaPersistenceDataError,
     BostaPersistenceIdentityConflict,
@@ -66,6 +68,31 @@ DELIVERY_VALUE_FIELDS = frozenset({
     "price_after_vat",
     "vat_rate",
     "pricing_currency_code",
+    "lifecycle_stage",
+    "return_scenario",
+    "lifecycle_rule_code",
+    "lifecycle_ambiguous",
+})
+
+LIFECYCLE_VALUE_FIELDS = frozenset({
+    "lifecycle_stage",
+    "return_scenario",
+    "lifecycle_rule_code",
+    "lifecycle_ambiguous",
+})
+
+LIFECYCLE_SOURCE_FIELDS = frozenset({
+    "delivery_type_code",
+    "delivery_type_value",
+    "state_code",
+    "state_value",
+    "state_child_state",
+    "masked_state",
+    "pending_pickup_at",
+    "collected_from_business_at",
+    "picked_up_at",
+    "delivery_time",
+    "bosta_updated_at",
 })
 
 ITEM_VALUE_FIELDS = frozenset({
@@ -95,6 +122,7 @@ class BostaPersistenceService:
         self.env = env
         self.Delivery = env["bosta.delivery"]
         self.Item = env["bosta.delivery.item"]
+        self.lifecycle_interpreter = BostaLifecycleInterpreter()
 
     @staticmethod
     def empty_summary():
@@ -128,13 +156,18 @@ class BostaPersistenceService:
         values = {
             key: value
             for key, value in raw_values.items()
-            if key in DELIVERY_VALUE_FIELDS and key not in PROTECTED_EXTERNAL_FIELDS
+            if (
+                key in DELIVERY_VALUE_FIELDS
+                and key not in PROTECTED_EXTERNAL_FIELDS
+                and key not in LIFECYCLE_VALUE_FIELDS
+            )
         }
         for required in ("bosta_delivery_id", "tracking_number"):
             value = values.get(required)
             if not isinstance(value, str) or not value.strip():
                 raise BostaPersistenceDataError("Normalized Bosta delivery identity is required.")
             values[required] = value.strip()
+
         return values
 
     @staticmethod
@@ -173,6 +206,74 @@ class BostaPersistenceService:
         incoming = values.get("bosta_updated_at")
         stored = record.bosta_updated_at
         return bool(incoming and stored and incoming < stored)
+
+    def _derive_lifecycle_values(self, normalized, *, record=None, incoming_values=None):
+        """Interpret a patch against stored raw lifecycle facts without mutation."""
+        raw_values = normalized.get("values") if isinstance(normalized, dict) else None
+        raw_values = raw_values if isinstance(raw_values, dict) else {}
+
+        merged_values = {}
+        if record is not None:
+            for field_name in LIFECYCLE_SOURCE_FIELDS:
+                if field_name in record._fields:
+                    merged_values[field_name] = record[field_name]
+
+        # Preserve future interpreter-only fields such as an explicitly supplied
+        # normalized flow_type while keeping persistence field filtering separate.
+        for key, value in raw_values.items():
+            if key in LIFECYCLE_SOURCE_FIELDS or key == "flow_type":
+                merged_values[key] = value
+        if incoming_values:
+            for key, value in incoming_values.items():
+                if key in LIFECYCLE_SOURCE_FIELDS:
+                    merged_values[key] = value
+
+        lifecycle_envelope = {
+            "values": merged_values,
+            "items": None,
+            "timeline": normalized.get("timeline") if isinstance(normalized, dict) else None,
+            "source_kind": normalized.get("source_kind") if isinstance(normalized, dict) else None,
+        }
+        return self.lifecycle_interpreter.interpret(lifecycle_envelope)
+
+    @staticmethod
+    def _protect_lifecycle_regression(record, values):
+        """Keep stronger lifecycle evidence unless the payload is actually newer."""
+        current_stage = record.lifecycle_stage
+        incoming_stage = values.get("lifecycle_stage")
+        if not current_stage or not incoming_stage or current_stage == incoming_stage:
+            return values
+
+        incoming_updated = values.get("bosta_updated_at")
+        stored_updated = record.bosta_updated_at
+        has_newer_evidence = bool(
+            incoming_updated
+            and (not stored_updated or incoming_updated > stored_updated)
+        )
+        if has_newer_evidence:
+            return values
+
+        strength = {
+            "unknown": 10,
+            "ambiguous": 15,
+            "pre_pickup": 30,
+            "with_bosta": 40,
+            "customer_return_pickup": 50,
+            "returning_to_origin": 60,
+            "terminated": 70,
+            "delivered_to_customer": 80,
+            "customer_return_completed": 80,
+            "returned_to_origin": 90,
+            "lost": 100,
+            "damaged": 100,
+        }
+        if strength.get(incoming_stage, 0) >= strength.get(current_stage, 0):
+            return values
+
+        protected = dict(values)
+        for field_name in LIFECYCLE_VALUE_FIELDS:
+            protected.pop(field_name, None)
+        return protected
 
     @staticmethod
     def _item_key(values):
@@ -258,9 +359,13 @@ class BostaPersistenceService:
         with self.env.cr.savepoint():
             record = self._resolve_identity(model, company, values)
             if not record:
+                lifecycle = self._derive_lifecycle_values(
+                    normalized,
+                    incoming_values=values,
+                )
                 create_values = {
                     key: value
-                    for key, value in values.items()
+                    for key, value in {**values, **lifecycle}.items()
                     if key in model._fields
                 }
                 create_values["company_id"] = company.id
@@ -273,6 +378,13 @@ class BostaPersistenceService:
             if self._is_stale(record, values):
                 return {"record": record, "action": "unchanged"}
 
+            lifecycle = self._derive_lifecycle_values(
+                normalized,
+                record=record,
+                incoming_values=values,
+            )
+            values = {**values, **lifecycle}
+            values = self._protect_lifecycle_regression(record, values)
             updates = self._changed_values(record, values)
             parent_changed = bool(updates)
             if updates:

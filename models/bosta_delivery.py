@@ -9,6 +9,31 @@ FLOW_SELECTION = [
     ("other", "Other"),
 ]
 
+LIFECYCLE_STAGE_SELECTION = [
+    ("unknown", "Unknown"),
+    ("pre_pickup", "Pre-pickup"),
+    ("with_bosta", "With Bosta"),
+    ("delivered_to_customer", "Delivered to Customer"),
+    ("returning_to_origin", "Returning to Origin"),
+    ("returned_to_origin", "Returned to Origin"),
+    ("customer_return_pickup", "Customer Return Pickup"),
+    ("customer_return_completed", "Customer Return Completed"),
+    ("terminated", "Terminated"),
+    ("lost", "Lost"),
+    ("damaged", "Damaged"),
+    ("ambiguous", "Ambiguous"),
+]
+
+RETURN_SCENARIO_SELECTION = [
+    ("none", "None"),
+    ("pre_delivery_return", "Pre-delivery Return"),
+    ("post_delivery_customer_return", "Post-delivery Customer Return"),
+    ("partial_return", "Partial Return"),
+    ("lost", "Lost"),
+    ("damaged", "Damaged"),
+    ("ambiguous", "Ambiguous"),
+]
+
 
 class BostaDelivery(models.Model):
     _name = "bosta.delivery"
@@ -63,6 +88,40 @@ class BostaDelivery(models.Model):
     state_value = fields.Char(string="State", index=True)
     state_child_state = fields.Char(string="Child State")
     masked_state = fields.Char(string="Masked State")
+
+    lifecycle_stage = fields.Selection(
+        LIFECYCLE_STAGE_SELECTION,
+        string="Lifecycle Stage",
+        default="unknown",
+        required=True,
+        readonly=True,
+        index=True,
+        copy=False,
+        help="Safe lifecycle stage derived by the Bosta lifecycle interpreter.",
+    )
+    return_scenario = fields.Selection(
+        RETURN_SCENARIO_SELECTION,
+        string="Return Scenario",
+        default="none",
+        required=True,
+        readonly=True,
+        index=True,
+        copy=False,
+    )
+    lifecycle_rule_code = fields.Char(
+        string="Lifecycle Rule",
+        readonly=True,
+        copy=False,
+        index=True,
+        help="Short non-PII deterministic rule code used for lifecycle audit/debugging.",
+    )
+    lifecycle_ambiguous = fields.Boolean(
+        string="Lifecycle Ambiguous",
+        default=False,
+        readonly=True,
+        copy=False,
+        index=True,
+    )
 
     bosta_created_at = fields.Datetime(string="Bosta Created At")
     bosta_updated_at = fields.Datetime(string="Bosta Updated At", index=True)

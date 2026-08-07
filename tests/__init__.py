@@ -14,3 +14,6 @@ from . import test_real_bosta_payload_shapes
 from . import test_persistence_service
 from . import test_sync_service
 from . import test_phase5_baseline
+from . import test_lifecycle_interpreter
+from . import test_lifecycle_persistence
+from . import test_phase6_baseline

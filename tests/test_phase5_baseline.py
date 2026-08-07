@@ -13,7 +13,7 @@ class TestBostaPhase5Baseline(TransactionCase):
 
     def test_01_manifest_version_dependencies_and_installability(self):
         manifest = get_manifest("bosta_integration")
-        self.assertEqual(manifest["version"], "18.0.7.0.0")
+        self.assertEqual(manifest["version"], "18.0.8.0.0")
         self.assertEqual(manifest.get("depends"), ["base"])
         self.assertTrue(manifest.get("installable"))
         for forbidden in ("sale", "stock", "account", "website"):

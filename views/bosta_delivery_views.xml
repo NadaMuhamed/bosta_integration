@@ -9,6 +9,9 @@
                 <field name="delivery_type_value"/>
                 <field name="flow_type"/>
                 <field name="state_value"/>
+                <field name="lifecycle_stage"/>
+                <field name="return_scenario" optional="show"/>
+                <field name="lifecycle_ambiguous" optional="show"/>
                 <field name="creation_source"/>
                 <field name="business_reference" optional="show"/>
                 <field name="cod_amount" optional="show"/>
@@ -32,6 +35,8 @@
                 <field name="creation_source"/>
                 <field name="delivery_type_value"/>
                 <field name="state_value"/>
+                <field name="lifecycle_stage"/>
+                <field name="return_scenario"/>
                 <filter name="flow_forward" string="Forward" domain="[('flow_type', '=', 'forward')]"/>
                 <filter name="flow_return_to_origin" string="Return to Origin" domain="[('flow_type', '=', 'return_to_origin')]"/>
                 <filter name="flow_customer_return" string="Customer Return" domain="[('flow_type', '=', 'customer_return')]"/>
@@ -95,6 +100,12 @@
                                     <field name="state_value"/>
                                     <field name="state_child_state"/>
                                     <field name="masked_state"/>
+                                </group>
+                                <group string="Derived Lifecycle">
+                                    <field name="lifecycle_stage" readonly="1"/>
+                                    <field name="return_scenario" readonly="1"/>
+                                    <field name="lifecycle_ambiguous" readonly="1"/>
+                                    <field name="lifecycle_rule_code" readonly="1"/>
                                 </group>
                                 <group string="Timestamps">
                                     <field name="bosta_created_at"/>
