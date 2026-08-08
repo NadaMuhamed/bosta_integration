@@ -1,7 +1,7 @@
 {
     "name": "Bosta Integration",
-    "version": "18.0.9.0.0",
-    "summary": "Bosta product mapping and idempotent inventory effects",
+    "version": "18.0.10.0.0",
+    "summary": "Bosta safe returns and idempotent stock restoration",
     "description": """
 Bosta Integration
 =================
@@ -18,9 +18,14 @@ idempotent stock transfers from Internal Stock to Bosta Transit. Successfully
 delivered forward shipments may be finalized from Bosta Transit to Odoo's
 Customer location.
 
-Phase 7 intentionally does NOT restore RTO/customer returns, create sales
-orders/customers/invoices, calculate profit/accounting, or add scheduled jobs.
-Those concerns remain deferred to later phases.
+Phase 8 adds manager-controlled safe original/return linking, auditable return
+cases, exactly-once RTO restoration from historical transit/source snapshots,
+and post-delivery customer-return MAIN restoration only after explicit warehouse
+inspection and approved returned quantities. It never auto-links by business
+reference or PII and never restores TESTER on a customer return.
+
+Profit, settlement, shipping/return fee accounting, refunds, invoices, sale
+orders, customer creation/matching, cron, webhooks, and queues remain deferred.
     """,
     "category": "Technical",
     "author": "My Company",
@@ -35,6 +40,7 @@ Those concerns remain deferred to later phases.
         "views/bosta_delivery_views.xml",
         "views/bosta_product_mapping_views.xml",
         "views/bosta_inventory_views.xml",
+        "views/bosta_return_views.xml",
     ],
     "application": True,
     "installable": True,

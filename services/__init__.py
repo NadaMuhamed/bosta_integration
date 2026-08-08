@@ -8,3 +8,4 @@ from . import bosta_product_helpers
 from . import bosta_product_code_parser
 from . import bosta_product_mapping_service
 from . import bosta_inventory_service
+from . import bosta_return_service

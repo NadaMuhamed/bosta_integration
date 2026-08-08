@@ -21,7 +21,7 @@ class TestBostaPhase3Baseline(TransactionCase):
 
     def test_manifest_is_phase3_and_stays_independent(self):
         manifest = get_manifest("bosta_integration")
-        self.assertEqual(manifest["version"], "18.0.9.0.0")
+        self.assertEqual(manifest["version"], "18.0.10.0.0")
         self.assertEqual(manifest.get("depends"), ["base", "stock"])
         for forbidden in ("sale", "account", "website"):
             self.assertNotIn(forbidden, manifest.get("depends", []))

@@ -51,6 +51,12 @@
                         groups="bosta_integration.group_bosta_integration_manager"
                         invisible="not inventory_sync_enabled"
                     />
+                    <button
+                        name="action_process_pending_returns"
+                        type="object"
+                        string="Retry Pending Returns"
+                        groups="bosta_integration.group_bosta_integration_manager"
+                    />
                 </header>
                 <sheet>
                     <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>

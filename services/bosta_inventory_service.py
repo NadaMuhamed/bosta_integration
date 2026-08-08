@@ -1,7 +1,8 @@
 """Phase 7 idempotent outbound inventory effects.
 
 Only forward merchandise departure is represented here.  Phase 8 return/RTO
-restoration is intentionally absent.
+restoration deliberately stays outside this service and is handled by
+``bosta_return_service``.
 """
 
 from collections import defaultdict

@@ -11,6 +11,7 @@ from ..services.bosta_api_client import BostaApiClient
 from ..services.bosta_extraction_service import BostaExtractionService
 from ..services.bosta_inventory_service import BostaInventoryService
 from ..services.bosta_product_mapping_service import BostaProductMappingService
+from ..services.bosta_return_service import BostaReturnService
 from ..services.bosta_persistence_service import BostaPersistenceService
 from ..services.exceptions import BostaApiError, BostaPersistenceError
 
@@ -607,6 +608,44 @@ class BostaIntegrationConfig(models.Model):
         finally:
             self._release_sync_lock()
 
+    def action_process_pending_returns(self):
+        self._ensure_manager_action_access()
+        if not self._try_acquire_sync_lock():
+            raise UserError(_("A Bosta synchronization or return retry is already running for this configuration."))
+        try:
+            service = BostaReturnService(self.env, self)
+            deliveries = self.env["bosta.delivery"].with_company(self.company_id).search([
+                ("company_id", "=", self.company_id.id),
+                ("flow_type", "in", ["return_to_origin", "customer_return"]),
+            ])
+            counts = {"processed": 0, "restored": 0, "review": 0, "pending": 0}
+            for delivery in deliveries:
+                with self.env.cr.savepoint():
+                    case = service.process_delivery(delivery)
+                if not case:
+                    continue
+                counts["processed"] += 1
+                if case.state == "restored":
+                    counts["restored"] += 1
+                elif case.state in ("blocked", "review_required", "rejected"):
+                    counts["review"] += 1
+                else:
+                    counts["pending"] += 1
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Bosta Return Retry"),
+                    "message": _(
+                        "Processed: %(processed)s\nRestored: %(restored)s\nReview/blocked: %(review)s\nPending: %(pending)s"
+                    ) % counts,
+                    "type": "warning" if counts["review"] else "success",
+                    "sticky": bool(counts["review"]),
+                },
+            }
+        finally:
+            self._release_sync_lock()
+
     def action_sync_bosta_deliveries(self):
         self._ensure_manager_action_access()
         if not self.integration_enabled:
@@ -637,6 +676,15 @@ class BostaIntegrationConfig(models.Model):
             extraction = BostaExtractionService(client)
             persistence = BostaPersistenceService(self.env)
             inventory = BostaInventoryService(self.env, self)
+            returns = BostaReturnService(self.env, self)
+
+            def _post_persist(delivery):
+                # Phase 8 runs only after persistence/lifecycle and Phase 7
+                # inventory evaluation. Expected return blocks are represented
+                # on return cases; unexpected programming errors still surface.
+                inventory.process_delivery(delivery)
+                returns.process_delivery(delivery)
+
             try:
                 persistence.persist_search_deliveries(
                     extraction,
@@ -644,7 +692,7 @@ class BostaIntegrationConfig(models.Model):
                     page_size=self.page_size,
                     max_pages=self.max_pages,
                     summary=summary,
-                    post_persist=inventory.process_delivery,
+                    post_persist=_post_persist,
                 )
             except BostaApiError as exc:
                 safe_error = self._safe_status_message(getattr(exc, "status", "unknown_error"))

@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_bosta_return_case_list" model="ir.ui.view">
+        <field name="name">bosta.return.case.list</field>
+        <field name="model">bosta.return.case</field>
+        <field name="arch" type="xml">
+            <list string="Bosta Return Cases" create="0" delete="0"
+                  decoration-success="state == 'restored'"
+                  decoration-danger="state in ['blocked','review_required','rejected']"
+                  decoration-warning="state in ['pending_link','awaiting_physical_return','awaiting_inspection']">
+                <field name="return_delivery_id"/>
+                <field name="original_delivery_id"/>
+                <field name="return_type"/>
+                <field name="state"/>
+                <field name="inspection_state"/>
+                <field name="reason_code" optional="show"/>
+                <field name="restoration_picking_id" optional="show"/>
+                <field name="restored_at" optional="hide"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_bosta_return_case_form" model="ir.ui.view">
+        <field name="name">bosta.return.case.form</field>
+        <field name="model">bosta.return.case</field>
+        <field name="arch" type="xml">
+            <form string="Bosta Return Case" create="0" delete="0">
+                <header>
+                    <button name="action_link_original_delivery" type="object" string="Link Original Delivery"
+                            class="btn-primary" groups="bosta_integration.group_bosta_integration_manager"
+                            invisible="not link_candidate_delivery_id or state == 'restored'"/>
+                    <button name="action_unlink_original_delivery" type="object" string="Unlink Original"
+                            groups="bosta_integration.group_bosta_integration_manager"
+                            invisible="not original_delivery_id or state == 'restored'"/>
+                    <button name="action_accept_returned_product" type="object" string="Accept Returned Product"
+                            class="btn-primary" groups="bosta_integration.group_bosta_integration_manager"
+                            invisible="return_type != 'post_delivery_customer_return' or state in ['restored','rejected']"/>
+                    <button name="action_reject_returned_product" type="object" string="Reject Returned Product"
+                            groups="bosta_integration.group_bosta_integration_manager"
+                            invisible="return_type != 'post_delivery_customer_return' or state in ['restored','rejected']"/>
+                    <button name="action_retry_restoration" type="object" string="Retry Restoration"
+                            groups="bosta_integration.group_bosta_integration_manager"
+                            invisible="state not in ['blocked','ready_to_restore','pending_link','awaiting_physical_return','awaiting_inspection']"/>
+                    <field name="state" widget="statusbar" statusbar_visible="pending_link,awaiting_physical_return,awaiting_inspection,ready_to_restore,restored,blocked,review_required,rejected"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group string="Return">
+                            <field name="return_delivery_id" readonly="1"/>
+                            <field name="return_type" readonly="1"/>
+                            <field name="company_id" readonly="1" groups="base.group_multi_company"/>
+                            <field name="inspection_state" readonly="1"/>
+                            <field name="reason_code" readonly="1"/>
+                        </group>
+                        <group string="Safe Original Link">
+                            <field name="original_delivery_id" readonly="1"/>
+                            <field name="link_candidate_delivery_id"
+                                   groups="bosta_integration.group_bosta_integration_manager"
+                                   readonly="state == 'restored'"/>
+                            <div class="text-muted">
+                                businessReference and receiver/customer data are review evidence only and are never authoritative matching keys.
+                            </div>
+                        </group>
+                    </group>
+
+                    <group string="Customer Return Inspection" invisible="return_type != 'post_delivery_customer_return'">
+                        <field name="return_line_ids" nolabel="1" readonly="inspection_state != 'pending' or state == 'restored'">
+                            <list create="0" delete="0" editable="bottom">
+                                <field name="product_id" readonly="1"/>
+                                <field name="max_delivered_quantity" readonly="1"/>
+                                <field name="returned_quantity"/>
+                                <field name="original_inventory_effect_line_id" optional="hide" readonly="1"/>
+                            </list>
+                        </field>
+                        <div class="text-muted">
+                            Enter only physically verified MAIN quantities. Zero means no restoration. TESTER is never restored for a customer return.
+                        </div>
+                    </group>
+
+                    <group string="Restoration Audit">
+                        <group>
+                            <field name="restoration_effect_id" readonly="1"/>
+                            <field name="restoration_picking_id" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="restored_at" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_bosta_return_case_search" model="ir.ui.view">
+        <field name="name">bosta.return.case.search</field>
+        <field name="model">bosta.return.case</field>
+        <field name="arch" type="xml">
+            <search string="Bosta Return Cases">
+                <field name="return_delivery_id"/>
+                <field name="original_delivery_id"/>
+                <field name="state"/>
+                <field name="return_type"/>
+                <field name="reason_code"/>
+                <filter name="needs_review" string="Needs Review" domain="[('state', 'in', ['pending_link','blocked','review_required','awaiting_inspection'])]"/>
+                <filter name="restored" string="Restored" domain="[('state', '=', 'restored')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_state" string="State" context="{'group_by': 'state'}"/>
+                    <filter name="group_type" string="Return Type" context="{'group_by': 'return_type'}"/>
+                    <filter name="group_company" string="Company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_bosta_return_case" model="ir.actions.act_window">
+        <field name="name">Return Cases</field>
+        <field name="res_model">bosta.return.case</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_bosta_return_case_search"/>
+    </record>
+
+    <record id="view_bosta_return_restoration_effect_list" model="ir.ui.view">
+        <field name="name">bosta.return.restoration.effect.list</field>
+        <field name="model">bosta.return.restoration.effect</field>
+        <field name="arch" type="xml">
+            <list string="Return Restoration Effects" create="0" delete="0" edit="0"
+                  decoration-success="status == 'applied'" decoration-danger="status == 'blocked'">
+                <field name="return_case_id"/>
+                <field name="return_delivery_id"/>
+                <field name="original_delivery_id"/>
+                <field name="return_type"/>
+                <field name="status"/>
+                <field name="rule_code"/>
+                <field name="picking_id"/>
+                <field name="applied_at"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_bosta_return_restoration_effect_form" model="ir.ui.view">
+        <field name="name">bosta.return.restoration.effect.form</field>
+        <field name="model">bosta.return.restoration.effect</field>
+        <field name="arch" type="xml">
+            <form string="Return Restoration Effect" create="0" delete="0" edit="0">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="return_case_id"/>
+                            <field name="return_delivery_id"/>
+                            <field name="original_delivery_id"/>
+                            <field name="return_type"/>
+                        </group>
+                        <group>
+                            <field name="status"/>
+                            <field name="rule_code"/>
+                            <field name="picking_id"/>
+                            <field name="applied_at"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                    </group>
+                    <field name="line_ids" nolabel="1">
+                        <list create="0" delete="0" edit="0">
+                            <field name="role"/>
+                            <field name="product_id"/>
+                            <field name="quantity"/>
+                            <field name="source_location_id"/>
+                            <field name="destination_location_id"/>
+                            <field name="original_inventory_effect_line_id" optional="hide"/>
+                        </list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_bosta_return_restoration_effect" model="ir.actions.act_window">
+        <field name="name">Return Restoration Effects</field>
+        <field name="res_model">bosta.return.restoration.effect</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+    <menuitem id="menu_bosta_return_case" name="Return Cases"
+              parent="menu_bosta_integration_root" action="action_bosta_return_case"
+              sequence="9" groups="bosta_integration.group_bosta_integration_user"/>
+    <menuitem id="menu_bosta_return_restoration_effect" name="Return Restoration Effects"
+              parent="menu_bosta_integration_root" action="action_bosta_return_restoration_effect"
+              sequence="10" groups="bosta_integration.group_bosta_integration_user"/>
+</odoo>

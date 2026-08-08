@@ -24,3 +24,6 @@ from . import test_inventory_effects
 from . import test_inventory_idempotency
 from . import test_phase7_baseline
 from . import test_phase7_sync_integration
+from . import test_return_restoration
+from . import test_phase8_baseline
+from . import test_phase8_sync_integration

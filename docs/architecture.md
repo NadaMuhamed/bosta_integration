@@ -1,14 +1,15 @@
-# Bosta Integration Architecture — Phase 7
+# Bosta Integration Architecture — Phase 8
 
 ## Scope
 
 `bosta_integration` is an independent Odoo 18 module. Phases 0-6 provide the
 direct Bosta API boundary, deterministic extraction/normalization, persistent
 idempotent delivery sync, and lifecycle interpretation. Phase 7 adds product
-mapping foundations and opt-in inventory effects only.
+mapping foundations and opt-in inventory effects. Phase 8 adds safe return
+linking, auditable return cases, and exactly-once physical stock restoration.
 
-Phase 7 does **not** create sale orders, partners, invoices, accounting entries,
-profit calculations, or physical return/RTO restoration.
+Phase 8 does **not** create sale orders, partners, invoices, accounting entries,
+profit/settlement calculations, cron jobs, webhooks, or background queues.
 
 ## Product mapping
 
@@ -63,10 +64,9 @@ A successfully delivered forward shipment may then be finalized:
 Bosta Transit -> Customers
 ```
 
-Returning/returned-to-origin, lost, damaged, or terminated-after-pickup goods
-are not restored to source stock in Phase 7. RTO and customer-return Bosta
-records never create a second outbound deduction. Physical return restoration
-is Phase 8.
+RTO and customer-return Bosta records never create a second outbound deduction.
+Phase 8 restores only from a safely linked original forward inventory effect.
+Lost, damaged, terminated-after-pickup, and ambiguous states remain review-only.
 
 ## Idempotency and audit
 
@@ -96,3 +96,45 @@ formats. It preserves leading zeroes and refuses a complete package description
 when any product association is malformed or ambiguous. Parsed package evidence
 is represented inside the mapping/inventory layer and never fabricated as a
 Phase 4 `bosta.delivery.item`.
+
+## Phase 8 returns
+
+`bosta.return.case` is the manager review boundary for reverse Bosta records.
+The existing `bosta.delivery.original_delivery_id` remains the authoritative
+original/return relation. Phase 8 never auto-links by `businessReference`,
+receiver/customer data, COD, address, title, or date proximity. A manager may
+select a candidate and use the explicit safe-link action; validation requires
+the same company, a different record, a forward original, and an RTO/customer
+return record. Conflicts are blocked rather than overwritten.
+
+A completed pre-delivery RTO restores exactly the products and quantities that
+the original Phase 7 outbound effect proves left stock:
+
+```text
+historical Bosta Transit -> historical Source
+```
+
+Both MAIN and TESTER are restored when their original outbound snapshot proves
+they moved. Current product mappings and current config locations are never used
+to reconstruct history.
+
+A post-delivery customer return is different. Bosta logistics completion only
+moves the case to inspection. The warehouse/manager must enter the physically
+verified returned MAIN quantity per original delivered inventory line and accept
+the inspection. Only then is MAIN restored:
+
+```text
+historical Customer location -> historical Source
+```
+
+TESTER is never restored for a post-delivery customer return. Zero/unknown
+quantity, over-return risk, missing original stock evidence, or a non-delivered
+original blocks restoration.
+
+`bosta.return.restoration.effect` and its lines are the immutable restoration
+ledger. Each line snapshots product, role, quantity, historical source and
+destination, and the original Phase 7 inventory-effect line. Database uniqueness
+prevents duplicate effects per return case, while row-locking original inventory
+lines plus cumulative restoration checks prevent multiple return records from
+over-restoring the same original quantity. Stock changes are created only via
+normal `stock.picking` / `stock.move` validation.

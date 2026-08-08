@@ -406,9 +406,10 @@ class BostaPersistenceService:
     ):
         """Stream Search normalization into per-delivery persistence savepoints.
 
-        ``post_persist`` runs in the same per-delivery savepoint. Phase 7 uses
-        this hook for atomic inventory evaluation after a delivery is safely
-        persisted. Existing callers remain unchanged when the hook is absent.
+        ``post_persist`` runs in the same per-delivery savepoint. Phase 7/8 use
+        this hook for atomic inventory and return evaluation after a delivery
+        is safely persisted. Existing callers remain unchanged when the hook is
+        absent.
         """
         summary = summary if summary is not None else self.empty_summary()
         iterator = extraction_service.iter_normalized_search_deliveries(

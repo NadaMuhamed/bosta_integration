@@ -177,13 +177,37 @@
 
                         <page string="Returns">
                             <group>
-                                <field name="original_delivery_id" domain="[('company_id', '=', company_id), ('id', '!=', id)]"/>
+                                <group string="Authoritative Relation">
+                                    <field name="original_delivery_id" readonly="1"/>
+                                    <div class="text-muted">Use the manager Return Case workflow for safe linking. businessReference is never an authoritative match key.</div>
+                                </group>
+                            </group>
+                            <group string="This Delivery as Return">
+                                <field name="return_case_ids" readonly="1">
+                                    <list create="0" delete="0" edit="0">
+                                        <field name="return_type"/>
+                                        <field name="state"/>
+                                        <field name="inspection_state"/>
+                                        <field name="original_delivery_id"/>
+                                        <field name="restoration_picking_id"/>
+                                    </list>
+                                </field>
+                            </group>
+                            <group string="This Delivery as Original">
                                 <field name="return_delivery_ids" readonly="1">
-                                    <list>
+                                    <list create="0" delete="0" edit="0">
                                         <field name="tracking_number"/>
                                         <field name="delivery_type_value"/>
                                         <field name="flow_type"/>
-                                        <field name="state_value"/>
+                                        <field name="lifecycle_stage"/>
+                                    </list>
+                                </field>
+                                <field name="related_return_case_ids" readonly="1">
+                                    <list create="0" delete="0" edit="0">
+                                        <field name="return_delivery_id"/>
+                                        <field name="return_type"/>
+                                        <field name="state"/>
+                                        <field name="restoration_picking_id"/>
                                     </list>
                                 </field>
                             </group>

@@ -80,7 +80,7 @@ class TestBostaPhase4Baseline(TransactionCase):
 
     def test_phase4_manifest_and_boundary(self):
         manifest = get_manifest("bosta_integration")
-        self.assertEqual(manifest["version"], "18.0.9.0.0")
+        self.assertEqual(manifest["version"], "18.0.10.0.0")
         self.assertEqual(manifest.get("depends"), ["base", "stock"])
         module_path = Path(get_module_path("bosta_integration"))
         xml = "\n".join(path.read_text(encoding="utf-8").lower() for path in sorted((module_path / "views").glob("*.xml")))

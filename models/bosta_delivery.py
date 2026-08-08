@@ -176,12 +176,25 @@ class BostaDelivery(models.Model):
         index=True,
         ondelete="set null",
         check_company=True,
-        help="Optional link to the original delivery. Linking is performed by a later phase.",
+        help="Authoritative original delivery relation for Phase 8 returns. Use the manager return-case linking workflow; businessReference is never authoritative.",
     )
     return_delivery_ids = fields.One2many(
         "bosta.delivery",
         "original_delivery_id",
         string="Return Deliveries",
+    )
+
+    return_case_ids = fields.One2many(
+        "bosta.return.case",
+        "return_delivery_id",
+        string="Return Case",
+        readonly=True,
+    )
+    related_return_case_ids = fields.One2many(
+        "bosta.return.case",
+        "original_delivery_id",
+        string="Related Return Cases",
+        readonly=True,
     )
 
     item_ids = fields.One2many(
@@ -221,6 +234,20 @@ class BostaDelivery(models.Model):
     def _compute_item_count(self):
         for record in self:
             record.item_count = len(record.item_ids)
+
+
+    def write(self, vals):
+        if "original_delivery_id" in vals:
+            for record in self:
+                restored_cases = record.return_case_ids.filtered(lambda case: case.state == "restored")
+                if restored_cases:
+                    new_id = vals.get("original_delivery_id") or False
+                    current_id = record.original_delivery_id.id or False
+                    if new_id != current_id:
+                        raise ValidationError(_(
+                            "The original delivery relation is immutable after return stock restoration."
+                        ))
+        return super().write(vals)
 
     @api.constrains("company_id", "original_delivery_id")
     def _check_original_delivery_relation(self):
