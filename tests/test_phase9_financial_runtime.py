@@ -548,6 +548,68 @@ class TestPhase9FinancialRuntime(Phase7InventoryMixin, TransactionCase):
         self.assertEqual(second["action"], "updated")
         self.assertEqual(record.shipment_fees, 30)
 
+    def test_31_original_financial_id_is_false_without_snapshot(self):
+        original, _effect, _main, _tester = self._forward("931", delivered=False)
+        rto = self._rto("931R", original, stage="returning_to_origin")
+        case = self._return_service().process_delivery(rto)
+        self.assertEqual(case.original_delivery_id, original)
+        self.assertFalse(case.original_financial_id)
+
+    def test_32_original_financial_id_refreshes_when_snapshot_is_created_later(self):
+        original, _effect, _main, _tester = self._forward("932", delivered=False)
+        rto = self._rto("932R", original, stage="returning_to_origin")
+        case = self._return_service().process_delivery(rto)
+        self.assertEqual(case.original_delivery_id, original)
+        self.assertFalse(case.original_financial_id)
+
+        financial = self._financial_service().process_delivery(original)
+
+        # Do not manually invalidate the case here. Financial creation must
+        # invalidate the non-stored compute cache so this same recordset sees
+        # the newly-created, company-scoped snapshot.
+        self.assertEqual(case.original_financial_id, financial)
+
+    def test_33_original_financial_id_never_resolves_cross_company_snapshot(self):
+        original, _effect, _main, _tester = self._forward("933", delivered=False)
+        rto = self._rto("933R", original, stage="returning_to_origin")
+        case = self._return_service().process_delivery(rto)
+
+        other_company = self.env["res.company"].create({"name": "P9 Cross Company Finance"})
+        other_delivery = (
+            self.env["bosta.delivery"]
+            .sudo()
+            .with_context(bosta_delivery_persistence=True)
+            .with_company(other_company)
+            .create({
+                "company_id": other_company.id,
+                "bosta_delivery_id": "p9-cross-company-finance",
+                "tracking_number": "T-P9-CROSS-COMPANY-FINANCE",
+                "delivery_type_code": 10,
+                "delivery_type_value": "Send",
+            })
+        )
+        other_financial = (
+            self.env["bosta.delivery.financial"]
+            .sudo()
+            .with_context(bosta_financial_engine=True)
+            .with_company(other_company)
+            .create({
+                "company_id": other_company.id,
+                "delivery_id": other_delivery.id,
+                "currency_id": other_company.currency_id.id,
+            })
+        )
+
+        # Simulate a legacy/corrupt cross-company row that ORM check_company
+        # would reject today. The compute must still be protected explicitly by
+        # both company_id and delivery_id, not by a One2many traversal.
+        self.env.cr.execute(
+            "UPDATE bosta_delivery_financial SET delivery_id = %s WHERE id = %s",
+            [original.id, other_financial.id],
+        )
+        other_financial.invalidate_recordset(["delivery_id"])
+        case.invalidate_recordset(["original_financial_id"])
+        self.assertFalse(case.original_financial_id)
 
 
 class TestPhase9CronRuntime(TransactionCase):

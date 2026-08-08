@@ -294,3 +294,77 @@ class TestPhase9Baseline(TestCase):
                         )
         self.assertEqual(violations, [])
 
+    def test_37_original_financial_compute_is_upgrade_safe_and_company_scoped(self):
+        source = (ROOT / "models" / "bosta_return_case.py").read_text()
+        compute = source.split("def _compute_original_financial_id", 1)[1].split("_sql_constraints", 1)[0]
+        decorator = source.split("def _compute_original_financial_id", 1)[0].rsplit("@api.depends", 1)[1]
+        self.assertIn('(\"original_delivery_id\")', decorator)
+        self.assertNotIn("original_delivery_id.financial_ids", source)
+        self.assertIn('self.env[\"bosta.delivery.financial\"]', compute)
+        self.assertIn('(\"company_id\", \"=\", case.company_id.id)', compute)
+        self.assertIn('(\"delivery_id\", \"=\", case.original_delivery_id.id)', compute)
+        self.assertIn("limit=1", compute)
+        self.assertNotIn(".sudo()", compute)
+
+    def test_38_phase9_models_have_no_dotted_api_depends(self):
+        violations = []
+        for path in sorted((ROOT / "models").glob("*.py")):
+            tree = ast.parse(path.read_text())
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                for decorator in node.decorator_list:
+                    if not (
+                        isinstance(decorator, ast.Call)
+                        and isinstance(decorator.func, ast.Attribute)
+                        and decorator.func.attr == "depends"
+                    ):
+                        continue
+                    for argument in decorator.args:
+                        if (
+                            isinstance(argument, ast.Constant)
+                            and isinstance(argument.value, str)
+                            and "." in argument.value
+                        ):
+                            violations.append(
+                                f"{path.name}:{node.name}:{argument.value}"
+                            )
+        self.assertEqual(violations, [])
+
+    def test_39_manifest_metadata_describes_phase9_not_phase2r(self):
+        manifest = ast.literal_eval((ROOT / "__manifest__.py").read_text())
+        summary = " ".join(manifest["summary"].lower().split())
+        description = " ".join(manifest["description"].lower().split())
+        for term in ("direct bosta api", "inventory", "returns", "financial", "scheduled sync"):
+            self.assertIn(term, summary)
+        for term in (
+            "direct bosta api",
+            "persistent deliveries",
+            "lifecycle",
+            "product mapping",
+            "inventory",
+            "restoration",
+            "operational contribution snapshots",
+            "bosta logistics-fee evidence",
+            "scheduled sync",
+        ):
+            self.assertIn(term, description)
+        stale = " ".join((summary, description))
+        self.assertNotIn("secure bosta api configuration, client, pagination, and connection testing", stale)
+        self.assertNotIn("phase 3+", stale)
+        self.assertNotIn("scheduled sync is excluded", stale)
+
+    def test_40_deployable_tree_has_no_development_or_macos_artifacts(self):
+        # Runtime imports may legitimately create __pycache__/ and *.pyc next to
+        # the tests. Bytecode artifacts are therefore validated on the final ZIP,
+        # not against the live source tree while the suite is running.
+        violations = []
+        for path in ROOT.rglob("*"):
+            relative = path.relative_to(ROOT)
+            if any(part in {".git", "__macosx"} for part in map(str.lower, relative.parts)):
+                violations.append(str(relative))
+                continue
+            if path.is_file() and path.name == ".DS_Store":
+                violations.append(str(relative))
+        self.assertEqual(violations, [])
+

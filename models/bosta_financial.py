@@ -183,7 +183,7 @@ class BostaDeliveryFinancial(models.Model):
         ),
     ]
 
-    @api.depends("adjustment_ids.amount", "contribution_profit")
+    @api.depends("adjustment_ids", "contribution_profit")
     def _compute_adjustment_totals(self):
         for record in self:
             credit = record.currency_id.round(sum(record.adjustment_ids.mapped("amount")))
@@ -196,7 +196,18 @@ class BostaDeliveryFinancial(models.Model):
     def create(self, vals_list):
         if not self.env.context.get(_FINANCIAL_ENGINE_CONTEXT):
             raise AccessError(_("Financial snapshots are created only by the Bosta financial engine."))
-        return super().create(vals_list)
+        records = super().create(vals_list)
+        # original_financial_id intentionally depends only on original_delivery_id
+        # so registry loading remains safe when upgrading a Phase 8 database.
+        # Creating the financial later does not touch that dependency, so clear
+        # the non-stored compute cache for already-linked return cases.
+        return_cases = self.env["bosta.return.case"].search([
+            ("company_id", "in", records.company_id.ids),
+            ("original_delivery_id", "in", records.delivery_id.ids),
+        ])
+        if return_cases:
+            return_cases.invalidate_recordset(["original_financial_id"])
+        return records
 
     def write(self, vals):
         if self.env.context.get(_FINANCIAL_ENGINE_CONTEXT):

@@ -5,130 +5,104 @@
 Target module version: `18.0.11.0.0`.
 Dependencies: exactly `base`, `stock`.
 
-Phase 9 adds an operational contribution layer for Bosta deliveries, immutable
-product-cost snapshots, authoritative/missing Bosta fee semantics, Phase 8
-return-aware cost credits, manager financial review, one shared opt-in scheduled
-sync cron, and bounded opt-in Details enrichment. It does not create Sales,
-Accounting, Purchase, customer, refund, payment, or journal-entry records.
+Phase 9 provides direct Bosta API integration, normalized persistent
+Deliveries/items, deterministic lifecycle handling, Phase 7 product mapping and
+inventory effects, Phase 8 safe returns/restoration, operational financial
+snapshots with Bosta fee evidence, and opt-in scheduled sync with bounded
+Details enrichment.
 
-## Financial safety rules implemented
+## Phase 8 -> Phase 9 upgrade-safety fix
 
-- COD remains operational collection data and is never recognized revenue by
-  default. A manager must explicitly confirm revenue or explicitly confirm COD
-  as revenue.
-- Missing revenue, product cost, logistics cost, return fee, or required
-  compensation is never silently converted to zero.
-- API monetary presence flags distinguish a real explicit zero from a missing
-  field. These flags and the corresponding API financial evidence are protected
-  from direct manual writes; reviewed overrides live on the financial snapshot.
-- `product.standard_price` is snapshotted only when it is a finite positive
-  configured inventory cost. A zero/unavailable standard cost remains
-  incomplete unless a manager explicitly confirms a cost override (including an
-  intentional zero override).
-- Historical cost lines use the Phase 7 inventory-effect product/quantity
-  snapshots, never current mapping resolution.
-- Restoration credits use only applied Phase 8 restoration-effect lines linked
-  to the original Phase 7 inventory-effect line and role. Credits are capped at
-  original snapshotted quantity/cost.
-- RTO can credit MAIN and TESTER only after physical Phase 8 restoration. The
-  original logistics charge remains.
-- Post-delivery customer return credits only the actually restored MAIN quantity;
-  TESTER remains consumed. An additional return fee is unknown unless explicitly
-  authoritative/manager-confirmed.
-- A Bosta `shipmentFees` total is used without adding pricing aliases/components
-  again. Currency must be explicit and compatible; otherwise the result remains
-  incomplete/review-required.
-- Finalized financial snapshots are not silently rewritten by later product cost
-  or mapping changes.
+`bosta.return.case.original_financial_id` no longer declares a registry-time
+dotted dependency on `original_delivery_id.financial_ids`. It depends only on
+`original_delivery_id` and resolves `bosta.delivery.financial` by an explicit
+ORM search on both `company_id` and `delivery_id`, with `limit=1`. The compute
+does not use `sudo()`, so existing access controls and record rules remain in
+force. `bosta.delivery.financial_ids` remains available for the manager UI and
+the `(company_id, delivery_id)` database uniqueness remains authoritative.
 
-## Scheduled sync / locking
+The other Phase 9 dotted compute dependency, `adjustment_ids.amount`, was also
+removed. `_compute_adjustment_totals` now depends on `adjustment_ids` and
+`contribution_profit`. Financial adjustments are immutable and their amount is
+set at creation, so relation creation/removal is the required invalidation
+boundary while avoiding a Phase-9-only dotted registry dependency.
 
-One shared `ir.cron` wakes every five minutes and selects only active,
-integration-enabled, auto-sync-enabled configurations that are due. Auto sync is
-OFF by default, and enabling it schedules the first due time explicitly.
+No new Phase 9 migration, init hook, post-init hook, automatic finance
+finalization, return/restoration replay, stock replay, or network-on-registry
+behavior was added. Existing historical deliveries, mappings, stock effects,
+return cases, and restoration effects are not deleted or recreated by this
+change. Missing historical financial evidence remains missing/not-ready rather
+than being synthesized as zero.
 
-Cron calls the existing `action_sync_bosta_deliveries()` path. Optional Details
-financial enrichment is requested through context and runs *inside that same
-sync action while the accepted advisory lock is still held*. Therefore Search,
-persistence, inventory, returns, finance, and the optional bounded Details pass
-cannot overlap another manual/cron sync for the same configuration. Different
-configurations remain independent.
+## Financial and operational safety retained
 
-Details enrichment is OFF by default, capped by configuration (1..200, default
-50), selects only financially relevant forward deliveries missing authoritative
-shipment fees, and will not re-enrich the same record more often than hourly.
-Authentication/rate-limit failures stop the current enrichment batch safely;
-ordinary per-delivery API/persistence failures do not create fake fees.
+- COD is not recognized as revenue automatically.
+- Missing financial evidence remains distinct from explicit zero.
+- Product costs remain snapshotted; finalized base history remains immutable.
+- Later authoritative return effects use idempotent adjustments/revisions.
+- RTO credits require actual Phase 8 restoration and may credit MAIN + TESTER.
+- Accepted customer returns credit MAIN only; TESTER remains consumed.
+- Financial credit remains capped by historical gross COGS.
+- Logistics/return/compensation values are not invented without evidence.
+- API financial evidence fields remain protected from ordinary create/write.
+- Manager-only overrides, company isolation, safe return linking, advisory
+  locking, and existing stock/return behavior are unchanged.
 
-## Static validation actually run in this workspace
+## Tests added for this fix
 
-- `python3 -m compileall -q .`: PASS.
-- Manifest parse: PASS.
-  - version: `18.0.11.0.0`
-  - depends: `['base', 'stock']`
-  - installable: `True`
-- XML parse: PASS (`10` XML files).
-- `git diff --check`: PASS.
-- Static test discovery: `31` `test_*.py` files and `573` test methods.
-  Discovery is not execution of Odoo-dependent tests.
+Static/baseline guards now verify:
 
-## Pure regression actually run
+- `original_financial_id` has no `original_delivery_id.financial_ids` dependency;
+- its search is explicitly scoped by both company and original delivery;
+- no model contains a dotted `@api.depends` dependency;
+- the manifest is exactly version `18.0.11.0.0` with dependencies
+  `['base', 'stock']`;
+- manifest summary/description describe Phase 9 rather than the old Phase 2R
+  copy;
+- inherited view XPaths do not use `@string` selectors;
+- the deployable source tree contains no `.git`, `__MACOSX`, `.DS_Store`,
+  `__pycache__`, or `.pyc` artifacts.
 
-The same non-Odoo pure regression surface from the accepted Phase 8 artifact was
-re-run together with the Phase 9 static baseline. The harness covers API client,
-pagination, normalization, Search/Details separation, lifecycle interpretation,
-real payload shapes, product-code parser behavior, Phase 8 static boundaries,
-and the new Phase 9 static/architecture guards.
+Odoo runtime regression tests were added for:
+
+1. no financial snapshot -> `original_financial_id` is false;
+2. existing original snapshot -> it resolves correctly;
+3. even a simulated legacy/corrupt cross-company financial row cannot resolve.
+
+## Validation actually run for this corrected artifact
+
+This workspace has no importable `odoo` Python package, no `odoo` CLI, and no
+Docker executable. Therefore Odoo `TransactionCase`, clean-install, full-suite,
+and real-database upgrade commands were **not run** for this corrected artifact.
+They must not be reported as PASS from this workspace.
+
+The non-Odoo test harness available here was run after the code changes and
+reported:
 
 ```text
-228 tests/cases
-0 failures
-0 errors
+Ran 224 tests in 0.123s
+OK
+PURE_RESULT tests=224 failures=0 errors=0 skipped=0
 ```
 
-This consists of the prior 198 pure Phase 8 cases plus 30 Phase 9 baseline cases.
-No live Bosta network request was made.
+The final packaging pass additionally runs Python source compilation, XML parse,
+manifest validation, XPath/dependency static guards, and ZIP-entry artifact
+validation. See the delivery report accompanying the ZIP for those exact final
+outputs.
 
-## Odoo-dependent Phase 9 coverage added
+## Manual real database proof still required
 
-`tests/test_phase9_financial_runtime.py` adds runtime coverage for recognized
-revenue confirmation, COD non-default behavior, missing-versus-explicit-zero
-fees, MAIN/TESTER COGS, quantity multiplication, immutable standard-cost
-snapshots, duplicate financial uniqueness, stock non-mutation, audited manager
-cost overrides, ordinary-user denial, RTO MAIN/TESTER cost credit and shipping
-retention, repeated RTO idempotency, customer-return MAIN-only/partial credits,
-return rejection, safe-link requirements, lost-shipment compensation review,
-finalization stability, cron opt-in, due/not-due behavior, missing-key safety,
-and per-config cron failure isolation.
-
-These Odoo-dependent tests are syntax-compiled in this workspace but were **not
-executed** because this environment has neither an importable Odoo runtime nor a
-Docker executable.
-
-## Clean install / full Odoo acceptance
-
-Not run here. Do not mark Phase 9 full acceptance PASS until a project environment
-with Odoo/Docker runs a fresh database:
+Run the requested upgrade manually against the existing database after placing
+the corrected module in the configured addons path:
 
 ```bash
-docker compose run --rm web odoo \
-  -d bosta_phase9_test \
-  -i bosta_integration \
-  --test-enable \
-  --test-tags /bosta_integration \
+odoo \
+  -d odoo18_test \
+  -u bosta_integration \
   --without-demo=all \
-  --stop-after-init \
-  --log-level=test
+  --stop-after-init
 ```
 
-Required actual final result: `0 failed, 0 error(s)`.
-
-## Upgrade-safety review
-
-The Phase 8 -> Phase 9 schema change is additive. Existing deliveries, item
-mappings, inventory effects, return cases, and restoration effects remain the
-source history. Installation/upgrade does not make Bosta network calls, replay
-stock, create return restorations, or mass-finalize historical financial data.
-Existing historical fee fields deliberately do not receive synthetic presence
-flags during upgrade; they remain incomplete until authoritative re-sync/Details
-evidence or an explicit manager confirmation is available.
+Only that successful command can establish the real Phase 8 -> Phase 9 database
+upgrade result and refresh the Odoo Apps metadata through the normal module
+upgrade path. No direct SQL update of `ir_module_module` is required or used.

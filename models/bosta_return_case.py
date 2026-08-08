@@ -122,10 +122,21 @@ class BostaReturnCase(models.Model):
         readonly=True,
     )
 
-    @api.depends("original_delivery_id", "original_delivery_id.financial_ids")
+    @api.depends("original_delivery_id")
     def _compute_original_financial_id(self):
+        Financial = self.env["bosta.delivery.financial"]
         for case in self:
-            case.original_financial_id = case.original_delivery_id.financial_ids[:1]
+            if not case.original_delivery_id:
+                case.original_financial_id = False
+                continue
+            case.original_financial_id = Financial.search(
+                [
+                    ("company_id", "=", case.company_id.id),
+                    ("delivery_id", "=", case.original_delivery_id.id),
+                ],
+                order="id",
+                limit=1,
+            )
 
     _sql_constraints = [
         (

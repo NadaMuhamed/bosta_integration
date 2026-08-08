@@ -1,7 +1,7 @@
 {
     "name": "Bosta Integration",
     "version": "18.0.11.0.0",
-    "summary": "Bosta operational profitability, safe returns, and scheduled sync",
+    "summary": "Direct Bosta API, lifecycle inventory/returns, financial snapshots, scheduled sync",
     "description": """
 Bosta Integration
 =================
