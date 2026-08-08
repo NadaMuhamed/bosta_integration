@@ -147,6 +147,7 @@ class BostaDelivery(models.Model):
     dropoff_apartment = fields.Char(string="Apartment")
 
     package_items_count = fields.Integer(string="Package Items Count")
+    package_description = fields.Text(string="Package Description")
     package_type = fields.Char(string="Package Type")
     package_size = fields.Char(string="Package Size")
     package_weight = fields.Float(string="Package Weight")

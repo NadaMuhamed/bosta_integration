@@ -13,10 +13,10 @@ class TestBostaPhase5Baseline(TransactionCase):
 
     def test_01_manifest_version_dependencies_and_installability(self):
         manifest = get_manifest("bosta_integration")
-        self.assertEqual(manifest["version"], "18.0.8.0.0")
-        self.assertEqual(manifest.get("depends"), ["base"])
+        self.assertEqual(manifest["version"], "18.0.9.0.0")
+        self.assertEqual(manifest.get("depends"), ["base", "stock"])
         self.assertTrue(manifest.get("installable"))
-        for forbidden in ("sale", "stock", "account", "website"):
+        for forbidden in ("sale", "account", "website"):
             self.assertNotIn(forbidden, manifest.get("depends", []))
 
     def test_02_no_cron_or_background_sync_is_added(self):
@@ -73,7 +73,6 @@ class TestBostaPhase5Baseline(TransactionCase):
             (module_path / relative).read_text(encoding="utf-8").lower()
             for relative in (
                 "services/bosta_persistence_service.py",
-                "models/bosta_config.py",
             )
         )
         forbidden = (

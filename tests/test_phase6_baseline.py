@@ -19,8 +19,8 @@ class TestBostaPhase6Baseline(TransactionCase):
 
     def test_01_manifest_version_dependency_and_installability(self):
         manifest = get_manifest("bosta_integration")
-        self.assertEqual(manifest["version"], "18.0.8.0.0")
-        self.assertEqual(manifest.get("depends"), ["base"])
+        self.assertEqual(manifest["version"], "18.0.9.0.0")
+        self.assertEqual(manifest.get("depends"), ["base", "stock"])
         self.assertTrue(manifest.get("installable"))
 
     def test_02_exact_lifecycle_stage_values_exist(self):
@@ -68,7 +68,6 @@ class TestBostaPhase6Baseline(TransactionCase):
             for relative in (
                 "services/bosta_lifecycle_interpreter.py",
                 "services/bosta_persistence_service.py",
-                "models/bosta_config.py",
             )
         )
         forbidden = (
@@ -102,8 +101,10 @@ class TestBostaPhase6Baseline(TransactionCase):
         ):
             self.assertIn(f'name="{field_name}"', view)
 
-    def test_10_no_forbidden_phase7_plus_features_added(self):
-        manifest = (self.module_path / "__manifest__.py").read_text(encoding="utf-8").lower()
-        self.assertNotIn('"stock"', manifest.split('"depends"', 1)[1].split(']', 1)[0])
-        self.assertNotIn('"sale"', manifest.split('"depends"', 1)[1].split(']', 1)[0])
-        self.assertNotIn('"account"', manifest.split('"depends"', 1)[1].split(']', 1)[0])
+    def test_10_phase7_adds_only_stock_dependency_not_later_business_apps(self):
+        manifest = get_manifest("bosta_integration")
+        self.assertIn("stock", manifest.get("depends", []))
+        self.assertNotIn("sale", manifest.get("depends", []))
+        self.assertNotIn("account", manifest.get("depends", []))
+        self.assertNotIn("purchase", manifest.get("depends", []))
+        self.assertNotIn("website", manifest.get("depends", []))

@@ -1,95 +1,98 @@
-# Bosta Integration Architecture — Phase 2R
+# Bosta Integration Architecture — Phase 7
 
 ## Scope
 
-`bosta_integration` is an independent Odoo 18 module. Phase 2R replaces the old
-browser-based Bosta Dashboard authentication architecture with direct Bosta API
-access.
+`bosta_integration` is an independent Odoo 18 module. Phases 0-6 provide the
+direct Bosta API boundary, deterministic extraction/normalization, persistent
+idempotent delivery sync, and lifecycle interpretation. Phase 7 adds product
+mapping foundations and opt-in inventory effects only.
 
-Runtime flow:
+Phase 7 does **not** create sale orders, partners, invoices, accounting entries,
+profit calculations, or physical return/RTO restoration.
 
-```text
-bosta.integration.config
-        ↓
-BostaApiClient
-        ↓
-https://app.bosta.co
-        ↓
-Bosta API
-```
+## Product mapping
 
-Phase 2R intentionally does not create Odoo orders, customers, sale orders,
-stock movements, returns, profit records, or scheduled synchronization jobs.
+Authoritative stock-changing resolution is deliberately conservative and
+identity-aware:
 
-## Configuration
+1. A valid existing mapped external-ID identity for the same company/source wins.
+2. Otherwise, a valid existing mapped deterministic code identity for the same
+   company/source wins, even when the later observation also gains an external ID.
+3. Only when neither authoritative identity exists may a safely parsed business
+   code match `product.product.default_code`, and only when exactly one eligible
+   explicit MAIN product exists.
+4. Titles may be retained for review but never auto-create a stock-authoritative
+   mapping.
+5. Unmatched or conflicting products block the whole delivery inventory effect.
 
-The configuration model remains `bosta.integration.config` and remains scoped to
-one record per company. Only Bosta Integration Managers can access configuration
-records, and the existing company record rule continues to isolate records by
-allowed companies.
+A code identity is not silently promoted into an external-ID alias. This prevents
+a later stronger observation from replacing a prior manual/authoritative code
+choice with a fresh `default_code` lookup.
 
-API configuration fields:
+Bosta `productInfo.productId` is an external identity and is never compared to
+Odoo `default_code`.
 
-- `api_base_url` — restricted to `https://app.bosta.co`.
-- `api_key_env_var` — stores only the environment variable name.
-- `api_key_configured` — non-stored boolean indicating whether that variable is
-  currently populated.
-- `request_timeout_seconds` — bounded request timeout.
-- `page_size` — bounded to 1..1500.
-- `max_pages` — pagination safety cap.
+MAIN/tester relationships are explicit persisted fields on `product.product`.
+The manager-only bootstrap uses equal `default_code` plus the existing `3 ML`
+name convention only as a one-time conservative initializer; runtime inventory
+logic then relies on the persisted roles and links.
 
-## API client
+## Inventory safety boundary
 
-`services/bosta_api_client.py` owns HTTP transport responsibilities only:
+Inventory is disabled by default. Enabling it requires the Bosta integration,
+an explicit go-live cutoff, a company-safe internal source location, and a
+company-safe Bosta Transit location. Multiple internal operation types must be
+disambiguated explicitly.
 
-- environment-only API key lookup at request time;
-- request headers and URLs;
-- POST delivery search;
-- GET delivery details;
-- JSON and basic contract validation;
-- bounded retries for temporary failures;
-- safe exception mapping;
-- full-delivery pagination with loop protection and de-duplication.
-
-The client supports injected HTTP transport and sleep functions so automated
-tests never require the live Bosta API and never wait for real retry backoff.
-
-## Pagination
-
-Search starts at page 1 and uses the configured page size, up to 1500. Pagination
-stops when any reliable completion condition is reached:
-
-1. the API returns an empty delivery list;
-2. the returned delivery count is less than the requested limit; or
-3. reliable pagination metadata explicitly indicates the final page.
-
-A full page is never treated as the historical end. If page 1 returns exactly
-1500 deliveries, page 2 is requested, and so on.
-
-Safety controls include:
-
-- configured maximum pages;
-- repeated-page fingerprint detection;
-- de-duplication by `_id`, then `trackingNumber`;
-- deterministic preservation of the first occurrence seen.
-
-If pagination clearly stops progressing, the client raises a safe pagination
-error instead of silently returning a falsely complete result.
-
-## Delivery details
-
-Delivery details use:
+Only forward deliveries can create outbound stock effects. Strong evidence that
+merchandise left the business causes an idempotent supported Odoo stock
+transfer:
 
 ```text
-GET /api/v2/deliveries/business/{tracking_number}
+Internal Stock -> Bosta Transit
 ```
 
-Tracking numbers are treated as text and safely URL-encoded. Phase 2R validates
-only the basic response envelope and returns the delivery payload; full Bosta
-business-field normalization belongs to a later phase.
+Each Bosta sale quantity moves the MAIN product and, when explicitly required,
+the linked tester in the same quantity. Missing mappings, conflicts, missing
+required tester links, insufficient stock, or reservation races block the
+entire delivery. No partial delivery stock mutation is allowed.
 
-## Upgrade
+A successfully delivered forward shipment may then be finalized:
 
-Version `18.0.4.0.0` includes a post-migration that removes obsolete stored
-Dashboard credential/session columns using a fixed allow-list. The migration is
-idempotent and does not read or print old encrypted values.
+```text
+Bosta Transit -> Customers
+```
+
+Returning/returned-to-origin, lost, damaged, or terminated-after-pickup goods
+are not restored to source stock in Phase 7. RTO and customer-return Bosta
+records never create a second outbound deduction. Physical return restoration
+is Phase 8.
+
+## Idempotency and audit
+
+`bosta.inventory.effect` is unique per company/delivery and stores the applied
+picking references plus immutable product/quantity and source/transit location
+snapshots after outbound application. Before outbound exists, a retry may refresh
+the effect locations from current config; the outbound picking is then created
+from exactly those audited locations. Once outbound exists, those location fields
+cannot be replaced by later configuration changes. Delivered finalization always
+uses the effect's historical transit snapshot as its source and prefers the
+outgoing operation type from the warehouse context of the already-applied outbound
+picking. Repeated sync/retry therefore cannot create a second source deduction or
+final picking.
+
+The normal delivery sync and manager retry action use the same existing
+configuration advisory lock. Inventory work runs inside per-delivery database
+savepoints. Expected mapping/stock blocks are recorded for review; unexpected
+programming errors are not silently swallowed.
+
+Stock is changed only by supported `stock.picking` / `stock.move` validation.
+The integration never writes `stock.quant.quantity` directly.
+
+## Package-description fallback
+
+The Phase 7 pure parser accepts only fully deterministic observed package
+formats. It preserves leading zeroes and refuses a complete package description
+when any product association is malformed or ambiguous. Parsed package evidence
+is represented inside the mapping/inventory layer and never fabricated as a
+Phase 4 `bosta.delivery.item`.

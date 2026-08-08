@@ -1,70 +1,51 @@
-# Bosta Integration Security — Phase 2R
+# Bosta Integration Security — Phase 7
 
-## API key boundary
+## Existing API boundary
 
-The Bosta API key is never persisted by Odoo.
+The Bosta API key remains environment-only. Odoo stores only the configured
+environment-variable name. Raw Authorization values, raw API payloads, and raw
+timelines are not persisted by Phase 7.
 
-```text
-BOSTA_API_KEY
-    ↓ environment only
-BostaApiClient
-    ↓
-Authorization header
-    ↓
-Bosta API
-```
+## Access control
 
-The configuration stores only the environment variable name (default
-`BOSTA_API_KEY`). Multi-company installations may configure a different
-non-secret variable name for another company.
+- `bosta.integration.config` stays manager-only.
+- Tester bootstrap, inventory enablement/configuration, delivery sync, and
+  pending-inventory retry are manager operations.
+- `bosta.product.mapping` is manager-writable and ordinary integration-user
+  read-only.
+- `bosta.inventory.effect` and its audit lines are read-only to users/managers;
+  only the internal inventory engine context writes them.
+- Company record rules isolate mappings, effects, effect lines, deliveries, and
+  configuration to allowed companies.
 
-The key must never be stored in PostgreSQL, `ir.config_parameter`, model fields,
-notifications, logs, exceptions, raw response storage, fixtures, screenshots, or
-documentation. The non-stored `api_key_configured` field exposes only whether a
-non-empty value currently exists.
+## Inventory safeguards
 
-## URL and configuration validation
+Inventory sync defaults to disabled and requires an explicit go-live cutoff,
+source location, and Bosta Transit location. Historical records before the
+cutoff remain reportable without mutating current stock.
 
-The base URL is restricted to the official HTTPS origin `https://app.bosta.co`.
-HTTP downgrade, embedded credentials, unexpected ports, paths, query strings,
-fragments, unrelated hosts, and deceptive subdomains are rejected.
+Product resolution is fail-closed. Bosta external product IDs are not treated
+as Odoo Internal References; title/fuzzy similarity cannot authorize stock
+movement. Any unresolved item blocks the entire delivery effect.
 
-Environment-variable names are restricted to uppercase letters, digits, and
-underscores and may not start with a digit.
+Stock availability is checked in aggregate for MAIN and tester quantities, and
+Odoo must fully reserve the complete picking before done quantities are set. A
+reservation race therefore becomes a blocked inventory effect rather than a
+partial/negative forced transfer.
 
-Request timeout, page size, and maximum page count are bounded to safe values.
-The integration cannot be enabled unless the environment key currently exists.
-If the key later disappears, API calls fail closed with a configuration error.
+Before outbound is applied, location audit fields may follow an explicitly changed
+configuration. Once the outbound picking exists, source/transit audit locations are
+immutable and must match that picking. Delivered finalization consumes only from
+that historical transit snapshot, so a later configuration change cannot redirect
+or rewrite an already-applied stock effect.
 
-## Error redaction
+The module creates normal traceable Odoo pickings/moves and never directly
+writes stock quants. Picking origins use only safe Bosta tracking identifiers;
+receiver names, phones, addresses, API secrets, and raw payloads are not copied
+into the Phase 7 inventory audit models.
 
-The API exception hierarchy contains only safe categories/messages. User-facing
-errors and stored `last_api_error` values never contain raw response bodies,
-request headers, the Authorization header, or environment secrets.
+## Phase boundary
 
-HTTP errors are mapped to safe categories for authentication failure, permission
-denial, rate limiting, timeout, connection failure, temporary server errors,
-contract errors, and unknown failures.
-
-## Retry safety
-
-Only temporary failures are retried: HTTP 429, 500, 502, 503, 504, and bounded
-connection failures. Authentication, permission, malformed-contract, and invalid
-configuration failures are not retried blindly.
-
-Retry count and backoff are bounded. `Retry-After` is accepted only when numeric
-and is capped. Sleep is injectable for deterministic tests.
-
-## Access control and companies
-
-Configuration remains manager-only. The existing allowed-company record rule is
-preserved. Manager actions explicitly verify group membership and write access.
-Ordinary Bosta Integration Users cannot access the configuration model through
-ACLs and cannot invoke Test API Connection.
-
-## Removed browser architecture
-
-Phase 2R contains no active Playwright, Chromium, Dashboard password, password
-encryption, browser storage-state, browser-session, CAPTCHA/OTP automation, or
-Dashboard login service code. Existing stored Dashboard columns are removed by
-the version migration rather than left behind in PostgreSQL.
+Phase 7 does not create sales/accounting/customer documents and does not restore
+RTO/customer-return stock. Return linkage and physical restoration remain
+explicitly deferred to Phase 8.

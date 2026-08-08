@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_bosta_product_mapping_list" model="ir.ui.view">
+        <field name="name">bosta.product.mapping.list</field>
+        <field name="model">bosta.product.mapping</field>
+        <field name="arch" type="xml">
+            <list string="Bosta Product Mappings" decoration-danger="mapping_status == 'conflict'" decoration-warning="mapping_status == 'unmatched'">
+                <field name="source_title"/>
+                <field name="external_product_id" optional="show"/>
+                <field name="source_product_code" optional="show"/>
+                <field name="mapping_status"/>
+                <field name="odoo_product_id"/>
+                <field name="mapping_method" optional="show"/>
+                <field name="seen_count" optional="hide"/>
+                <field name="last_seen_at" optional="show"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_bosta_product_mapping_form" model="ir.ui.view">
+        <field name="name">bosta.product.mapping.form</field>
+        <field name="model">bosta.product.mapping</field>
+        <field name="arch" type="xml">
+            <form string="Bosta Product Mapping">
+                <sheet>
+                    <group>
+                        <group string="Observed Bosta Identity">
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="creation_source"/>
+                            <field name="external_product_id" readonly="1"/>
+                            <field name="bosta_product_info_id" readonly="1"/>
+                            <field name="source_product_code" readonly="1"/>
+                            <field name="source_title" readonly="1"/>
+                        </group>
+                        <group string="Mapping">
+                            <field name="mapping_status"/>
+                            <field name="odoo_product_id" domain="[('bosta_product_role', '=', 'main'), '|', ('company_id', '=', False), ('company_id', '=', company_id)]"/>
+                            <field name="mapping_method"/>
+                            <field name="active"/>
+                            <field name="seen_count" readonly="1"/>
+                            <field name="last_seen_at" readonly="1"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_bosta_product_mapping_search" model="ir.ui.view">
+        <field name="name">bosta.product.mapping.search</field>
+        <field name="model">bosta.product.mapping</field>
+        <field name="arch" type="xml">
+            <search string="Bosta Product Mappings">
+                <field name="source_title"/>
+                <field name="external_product_id"/>
+                <field name="source_product_code"/>
+                <field name="odoo_product_id"/>
+                <filter name="unmatched" string="Unmatched" domain="[('mapping_status', '=', 'unmatched')]"/>
+                <filter name="conflict" string="Conflict" domain="[('mapping_status', '=', 'conflict')]"/>
+                <filter name="mapped" string="Mapped" domain="[('mapping_status', '=', 'mapped')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_status" string="Status" context="{'group_by': 'mapping_status'}"/>
+                    <filter name="group_company" string="Company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_bosta_product_mapping" model="ir.actions.act_window">
+        <field name="name">Product Mappings</field>
+        <field name="res_model">bosta.product.mapping</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_bosta_product_mapping_search"/>
+    </record>
+
+    <menuitem id="menu_bosta_product_mapping" name="Product Mappings"
+              parent="menu_bosta_integration_root" action="action_bosta_product_mapping"
+              sequence="7" groups="bosta_integration.group_bosta_integration_user"/>
+</odoo>

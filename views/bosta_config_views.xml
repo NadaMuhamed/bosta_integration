@@ -9,6 +9,7 @@
                 <field name="name"/>
                 <field name="company_id" groups="base.group_multi_company"/>
                 <field name="integration_enabled"/>
+                <field name="inventory_sync_enabled"/>
                 <field name="api_key_configured"/>
                 <field name="api_status"/>
                 <field name="active" optional="hide"/>
@@ -37,6 +38,19 @@
                         groups="bosta_integration.group_bosta_integration_manager"
                         invisible="not integration_enabled"
                     />
+                    <button
+                        name="action_bootstrap_bosta_tester_links"
+                        type="object"
+                        string="Bootstrap Tester Links"
+                        groups="bosta_integration.group_bosta_integration_manager"
+                    />
+                    <button
+                        name="action_process_pending_inventory"
+                        type="object"
+                        string="Retry Pending Inventory"
+                        groups="bosta_integration.group_bosta_integration_manager"
+                        invisible="not inventory_sync_enabled"
+                    />
                 </header>
                 <sheet>
                     <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
@@ -62,6 +76,18 @@
                             <field name="request_timeout_seconds"/>
                             <field name="page_size"/>
                             <field name="max_pages"/>
+                        </group>
+                    </group>
+
+                    <group string="Phase 7 Inventory">
+                        <group>
+                            <field name="inventory_sync_enabled"/>
+                            <field name="inventory_effective_from" required="inventory_sync_enabled"/>
+                        </group>
+                        <group>
+                            <field name="stock_source_location_id" required="inventory_sync_enabled"/>
+                            <field name="bosta_transit_location_id" required="inventory_sync_enabled"/>
+                            <field name="stock_picking_type_id"/>
                         </group>
                     </group>
 

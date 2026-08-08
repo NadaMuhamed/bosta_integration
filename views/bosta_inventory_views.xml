@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_bosta_inventory_effect_list" model="ir.ui.view">
+        <field name="name">bosta.inventory.effect.list</field>
+        <field name="model">bosta.inventory.effect</field>
+        <field name="arch" type="xml">
+            <list string="Bosta Inventory Effects" decoration-danger="status in ['blocked_mapping','blocked_tester','blocked_stock','exception']" decoration-success="status in ['outbound_applied','delivered_finalized']">
+                <field name="delivery_id"/>
+                <field name="status"/>
+                <field name="source_location_id" optional="show"/>
+                <field name="transit_location_id" optional="show"/>
+                <field name="outbound_picking_id" optional="show"/>
+                <field name="final_picking_id" optional="show"/>
+                <field name="blocked_reason" optional="show"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_bosta_inventory_effect_form" model="ir.ui.view">
+        <field name="name">bosta.inventory.effect.form</field>
+        <field name="model">bosta.inventory.effect</field>
+        <field name="arch" type="xml">
+            <form string="Bosta Inventory Effect" create="0" delete="0" edit="0">
+                <sheet>
+                    <group>
+                        <group>
+                            <field name="delivery_id"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                            <field name="status"/>
+                            <field name="blocked_reason"/>
+                        </group>
+                        <group>
+                            <field name="source_location_id"/>
+                            <field name="transit_location_id"/>
+                            <field name="outbound_picking_id"/>
+                            <field name="final_picking_id"/>
+                            <field name="outbound_applied_at"/>
+                            <field name="delivered_finalized_at"/>
+                        </group>
+                    </group>
+                    <field name="line_ids" nolabel="1">
+                        <list create="0" delete="0" edit="0">
+                            <field name="source_title"/>
+                            <field name="source_product_code"/>
+                            <field name="main_product_id"/>
+                            <field name="main_quantity"/>
+                            <field name="tester_product_id"/>
+                            <field name="tester_quantity"/>
+                            <field name="mapping_id" optional="hide"/>
+                        </list>
+                    </field>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_bosta_inventory_effect_search" model="ir.ui.view">
+        <field name="name">bosta.inventory.effect.search</field>
+        <field name="model">bosta.inventory.effect</field>
+        <field name="arch" type="xml">
+            <search string="Bosta Inventory Effects">
+                <field name="delivery_id"/>
+                <field name="status"/>
+                <filter name="blocked" string="Blocked / Review" domain="[('status', 'in', ['blocked_mapping','blocked_tester','blocked_stock','exception'])]"/>
+                <filter name="applied" string="Applied" domain="[('status', 'in', ['outbound_applied','delivered_finalized'])]"/>
+                <filter name="pending" string="Pending" domain="[('status', '=', 'pending_departure')]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_status" string="Status" context="{'group_by': 'status'}"/>
+                    <filter name="group_company" string="Company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_bosta_inventory_effect" model="ir.actions.act_window">
+        <field name="name">Inventory Effects</field>
+        <field name="res_model">bosta.inventory.effect</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_bosta_inventory_effect_search"/>
+    </record>
+
+    <menuitem id="menu_bosta_inventory_effect" name="Inventory Effects"
+              parent="menu_bosta_integration_root" action="action_bosta_inventory_effect"
+              sequence="8" groups="bosta_integration.group_bosta_integration_user"/>
+</odoo>

@@ -1,46 +1,40 @@
 {
     "name": "Bosta Integration",
-    "version": "18.0.8.0.0",
-    "summary": "Bosta delivery persistence with safe lifecycle interpretation",
+    "version": "18.0.9.0.0",
+    "summary": "Bosta product mapping and idempotent inventory effects",
     "description": """
 Bosta Integration
 =================
 
-Independent Odoo 18 foundation for direct Bosta API integration. Phase 2R
-provides environment-only API-key configuration, a safe HTTP client, bounded
-retry handling, paginated delivery retrieval, delivery-detail retrieval,
-manager-only API connection testing, multi-company configuration isolation,
-and redacted error handling.
+Independent Odoo 18 foundation for direct Bosta API integration. Phases 0-6
+provide safe API access, normalized persistent deliveries/items, idempotent
+synchronization, and deterministic lifecycle interpretation.
 
-Phase 3 adds source-agnostic persistent Bosta delivery and delivery-item models,
-raw delivery type/state storage, normalized flow classification, return-link
-schema, company-safe access controls, and inspection views.
+Phase 7 adds explicit MAIN/3 ML tester product relationships, a conservative
+one-time tester-link bootstrap, persistent source/company-aware Bosta product
+mapping, deterministic package-description business-code parsing, an opt-in
+inventory go-live cutoff, all-or-nothing delivery mapping/stock checks, and
+idempotent stock transfers from Internal Stock to Bosta Transit. Successfully
+delivered forward shipments may be finalized from Bosta Transit to Odoo's
+Customer location.
 
-Phase 4 adds pure Search/Details extraction orchestration, safe delivery/product/
-pricing/timeline normalization, partial-update merge semantics, and protection
-against unreliable pagination counts.
-
-Phase 5 adds company-safe, idempotent persistence/upsert of normalized Bosta
-records, deterministic delivery-item reconciliation, conservative stale-update
-protection, safe manual manager synchronization, operational audit fields, and
-advisory locking.
-
-Phase 6 adds a pure, deterministic lifecycle interpreter that combines Bosta
-flow, state, timestamps, and completed Details timeline evidence into persisted
-lifecycle inspection fields. Stock, sale orders, customer/product mapping,
-return linkage, profit/accounting, settlements, and scheduled jobs remain
-intentionally deferred.
+Phase 7 intentionally does NOT restore RTO/customer returns, create sales
+orders/customers/invoices, calculate profit/accounting, or add scheduled jobs.
+Those concerns remain deferred to later phases.
     """,
     "category": "Technical",
     "author": "My Company",
     "license": "LGPL-3",
-    "depends": ["base"],
+    "depends": ["base", "stock"],
     "data": [
         "security/bosta_security.xml",
         "security/ir.model.access.csv",
         "security/bosta_record_rules.xml",
+        "views/product_product_views.xml",
         "views/bosta_config_views.xml",
         "views/bosta_delivery_views.xml",
+        "views/bosta_product_mapping_views.xml",
+        "views/bosta_inventory_views.xml",
     ],
     "application": True,
     "installable": True,

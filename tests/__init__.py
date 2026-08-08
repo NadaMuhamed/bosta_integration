@@ -17,3 +17,10 @@ from . import test_phase5_baseline
 from . import test_lifecycle_interpreter
 from . import test_lifecycle_persistence
 from . import test_phase6_baseline
+from . import test_product_code_parser
+from . import test_product_tester_links
+from . import test_product_mapping
+from . import test_inventory_effects
+from . import test_inventory_idempotency
+from . import test_phase7_baseline
+from . import test_phase7_sync_integration

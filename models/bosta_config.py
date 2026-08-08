@@ -9,6 +9,8 @@ from odoo.exceptions import AccessError, UserError, ValidationError
 
 from ..services.bosta_api_client import BostaApiClient
 from ..services.bosta_extraction_service import BostaExtractionService
+from ..services.bosta_inventory_service import BostaInventoryService
+from ..services.bosta_product_mapping_service import BostaProductMappingService
 from ..services.bosta_persistence_service import BostaPersistenceService
 from ..services.exceptions import BostaApiError, BostaPersistenceError
 
@@ -175,6 +177,41 @@ class BostaIntegrationConfig(models.Model):
     last_sync_error_count = fields.Integer(string="Last Sync Errors", readonly=True, copy=False)
     last_sync_error = fields.Text(string="Last Sync Error", readonly=True, copy=False)
 
+    # Phase 7 inventory is deliberately opt-in. Existing historical deliveries
+    # cannot affect stock until a manager configures all required safeguards.
+    inventory_sync_enabled = fields.Boolean(
+        string="Inventory Sync Enabled",
+        default=False,
+        copy=False,
+    )
+    inventory_effective_from = fields.Datetime(
+        string="Inventory Effective From",
+        copy=False,
+        help="Go-live cutoff. Historical Bosta deliveries before this point never deduct current Odoo stock.",
+    )
+    stock_source_location_id = fields.Many2one(
+        "stock.location",
+        string="Stock Source Location",
+        domain="[('usage', '=', 'internal')]",
+        check_company=True,
+        ondelete="restrict",
+    )
+    bosta_transit_location_id = fields.Many2one(
+        "stock.location",
+        string="Bosta Transit Location",
+        domain="[('usage', '=', 'transit')]",
+        check_company=True,
+        ondelete="restrict",
+    )
+    stock_picking_type_id = fields.Many2one(
+        "stock.picking.type",
+        string="Internal Operation Type",
+        domain="[('code', '=', 'internal'), ('company_id', '=', company_id)]",
+        check_company=True,
+        ondelete="restrict",
+        help="Optional when the company has exactly one internal operation type; required to disambiguate multiple warehouses.",
+    )
+
     _sql_constraints = [
         (
             "bosta_config_company_unique",
@@ -307,6 +344,48 @@ class BostaIntegrationConfig(models.Model):
                 raise ValidationError(
                     _("Configure the Bosta API key in the server environment before enabling the integration.")
                 )
+
+    @api.constrains(
+        "inventory_sync_enabled",
+        "inventory_effective_from",
+        "stock_source_location_id",
+        "bosta_transit_location_id",
+        "stock_picking_type_id",
+        "integration_enabled",
+        "company_id",
+    )
+    def _check_inventory_configuration(self):
+        for record in self:
+            source = record.stock_source_location_id
+            transit = record.bosta_transit_location_id
+            picking_type = record.stock_picking_type_id
+            for location in (source, transit):
+                if location and location.company_id and location.company_id != record.company_id:
+                    raise ValidationError(_("Bosta inventory locations must be company-compatible."))
+            if source and source.usage != "internal":
+                raise ValidationError(_("The Bosta stock source location must be Internal."))
+            if transit and transit.usage != "transit":
+                raise ValidationError(_("The Bosta transit location must use the Transit location type."))
+            if source and transit and source == transit:
+                raise ValidationError(_("The Bosta source and transit locations must be different."))
+            if picking_type:
+                if picking_type.code != "internal" or picking_type.company_id != record.company_id:
+                    raise ValidationError(_("The Bosta internal operation type must be an Internal transfer for this company."))
+            if not record.inventory_sync_enabled:
+                continue
+            if not record.integration_enabled:
+                raise ValidationError(_("Enable the Bosta integration before enabling inventory sync."))
+            if not record.inventory_effective_from:
+                raise ValidationError(_("Set an inventory go-live cutoff before enabling Bosta inventory sync."))
+            if not source or not transit:
+                raise ValidationError(_("Configure both source and Bosta Transit locations before enabling inventory sync."))
+            if not picking_type:
+                internal_types = self.env["stock.picking.type"].sudo().search_count([
+                    ("company_id", "=", record.company_id.id),
+                    ("code", "=", "internal"),
+                ])
+                if internal_types != 1:
+                    raise ValidationError(_("Select the Internal Operation Type explicitly when the company does not have exactly one internal transfer type."))
 
     def _ensure_manager_action_access(self):
         self.ensure_one()
@@ -465,6 +544,69 @@ class BostaIntegrationConfig(models.Model):
             },
         }
 
+    def action_bootstrap_bosta_tester_links(self):
+        self._ensure_manager_action_access()
+        counts = BostaProductMappingService(self.env, self.company_id).bootstrap_tester_links()
+        message = _(
+            "Tester bootstrap completed:\nLinked: %(linked)s\nAlready linked: %(already_linked)s\n"
+            "Conflicts: %(conflicts)s\nSkipped: %(skipped)s"
+        ) % counts
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": _("Bosta Tester Bootstrap"),
+                "message": message,
+                "type": "warning" if counts["conflicts"] else "success",
+                "sticky": bool(counts["conflicts"]),
+            },
+        }
+
+    def action_process_pending_inventory(self):
+        self._ensure_manager_action_access()
+        if not self.inventory_sync_enabled:
+            raise UserError(_("Enable and fully configure Bosta inventory sync first."))
+        if not self._try_acquire_sync_lock():
+            raise UserError(_("A Bosta synchronization or inventory retry is already running for this configuration."))
+        try:
+            service = BostaInventoryService(self.env, self)
+            cutoff = self.inventory_effective_from
+            deliveries = self.env["bosta.delivery"].with_company(self.company_id).search([
+                ("company_id", "=", self.company_id.id),
+                ("flow_type", "=", "forward"),
+                "|", "|",
+                ("collected_from_business_at", ">=", cutoff),
+                ("picked_up_at", ">=", cutoff),
+                ("bosta_created_at", ">=", cutoff),
+            ])
+            counts = {"processed": 0, "applied": 0, "blocked": 0, "pending": 0}
+            for delivery in deliveries:
+                with self.env.cr.savepoint():
+                    effect = service.process_delivery(delivery)
+                counts["processed"] += 1
+                if not effect:
+                    continue
+                if effect.status in ("outbound_applied", "delivered_finalized"):
+                    counts["applied"] += 1
+                elif effect.status.startswith("blocked") or effect.status == "exception":
+                    counts["blocked"] += 1
+                else:
+                    counts["pending"] += 1
+            return {
+                "type": "ir.actions.client",
+                "tag": "display_notification",
+                "params": {
+                    "title": _("Bosta Inventory Retry"),
+                    "message": _(
+                        "Processed: %(processed)s\nApplied/finalized: %(applied)s\nBlocked/review: %(blocked)s\nPending: %(pending)s"
+                    ) % counts,
+                    "type": "warning" if counts["blocked"] else "success",
+                    "sticky": bool(counts["blocked"]),
+                },
+            }
+        finally:
+            self._release_sync_lock()
+
     def action_sync_bosta_deliveries(self):
         self._ensure_manager_action_access()
         if not self.integration_enabled:
@@ -494,6 +636,7 @@ class BostaIntegrationConfig(models.Model):
             client = self._build_api_client()
             extraction = BostaExtractionService(client)
             persistence = BostaPersistenceService(self.env)
+            inventory = BostaInventoryService(self.env, self)
             try:
                 persistence.persist_search_deliveries(
                     extraction,
@@ -501,6 +644,7 @@ class BostaIntegrationConfig(models.Model):
                     page_size=self.page_size,
                     max_pages=self.max_pages,
                     summary=summary,
+                    post_persist=inventory.process_delivery,
                 )
             except BostaApiError as exc:
                 safe_error = self._safe_status_message(getattr(exc, "status", "unknown_error"))

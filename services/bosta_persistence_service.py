@@ -50,6 +50,7 @@ DELIVERY_VALUE_FIELDS = frozenset({
     "dropoff_floor",
     "dropoff_apartment",
     "package_items_count",
+    "package_description",
     "package_type",
     "package_size",
     "package_weight",
@@ -401,8 +402,14 @@ class BostaPersistenceService:
         page_size=None,
         max_pages=None,
         summary=None,
+        post_persist=None,
     ):
-        """Stream Search normalization into per-delivery persistence savepoints."""
+        """Stream Search normalization into per-delivery persistence savepoints.
+
+        ``post_persist`` runs in the same per-delivery savepoint. Phase 7 uses
+        this hook for atomic inventory evaluation after a delivery is safely
+        persisted. Existing callers remain unchanged when the hook is absent.
+        """
         summary = summary if summary is not None else self.empty_summary()
         iterator = extraction_service.iter_normalized_search_deliveries(
             page_size=page_size,
@@ -413,6 +420,8 @@ class BostaPersistenceService:
             try:
                 with self.env.cr.savepoint():
                     result = self.upsert_normalized_delivery(normalized, company)
+                    if post_persist:
+                        post_persist(result["record"])
             except BostaPersistenceIdentityConflict:
                 summary["conflicts"] += 1
                 continue

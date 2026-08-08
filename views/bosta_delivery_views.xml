@@ -141,6 +141,7 @@
                             <group>
                                 <group>
                                     <field name="package_items_count"/>
+                                    <field name="package_description"/>
                                     <field name="package_type"/>
                                     <field name="package_size"/>
                                     <field name="package_weight"/>

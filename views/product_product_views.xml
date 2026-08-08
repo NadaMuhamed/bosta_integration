@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_product_product_form_bosta_phase7" model="ir.ui.view">
+        <field name="name">product.product.form.bosta.phase7</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_normal_form_view"/>
+        <field name="arch" type="xml">
+            <field name="default_code" position="after">
+                <field name="bosta_product_role" groups="bosta_integration.group_bosta_integration_manager"/>
+                <field name="bosta_tester_required"
+                       groups="bosta_integration.group_bosta_integration_manager"
+                       invisible="bosta_product_role != 'main'"/>
+                <field name="bosta_tester_product_id"
+                       groups="bosta_integration.group_bosta_integration_manager"
+                       invisible="bosta_product_role != 'main'"
+                       domain="[('bosta_product_role', '=', 'tester'), '|', ('company_id', '=', False), ('company_id', '=', company_id)]"/>
+            </field>
+        </field>
+    </record>
+
+    <record id="view_product_variant_easy_bosta_phase7" model="ir.ui.view">
+        <field name="name">product.product.form.easy.bosta.phase7</field>
+        <field name="model">product.product</field>
+        <field name="inherit_id" ref="product.product_variant_easy_edit_view"/>
+        <field name="arch" type="xml">
+            <field name="default_code" position="after">
+                <field name="bosta_product_role" groups="bosta_integration.group_bosta_integration_manager"/>
+                <field name="bosta_tester_required"
+                       groups="bosta_integration.group_bosta_integration_manager"
+                       invisible="bosta_product_role != 'main'"/>
+                <field name="bosta_tester_product_id"
+                       groups="bosta_integration.group_bosta_integration_manager"
+                       invisible="bosta_product_role != 'main'"
+                       domain="[('bosta_product_role', '=', 'tester'), '|', ('company_id', '=', False), ('company_id', '=', company_id)]"/>
+            </field>
+        </field>
+    </record>
+</odoo>

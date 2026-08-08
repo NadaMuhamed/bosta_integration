@@ -4,3 +4,7 @@ from . import bosta_delivery_normalizer
 from . import bosta_extraction_service
 from . import bosta_lifecycle_interpreter
 from . import bosta_persistence_service
+from . import bosta_product_helpers
+from . import bosta_product_code_parser
+from . import bosta_product_mapping_service
+from . import bosta_inventory_service

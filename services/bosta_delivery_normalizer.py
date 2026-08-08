@@ -393,6 +393,15 @@ def _normalize_package(values, payload):
             if value is not None:
                 values["package_items_count"] = value
 
+    # packageDetails.description is not authoritative productInfo, but Phase 7
+    # persists the original text as conservative mapping/inventory evidence.
+    specs = _mapping(payload.get("specs"))
+    package_details = _mapping(specs.get("packageDetails")) if specs is not None else None
+    if package_details is not None and _present(package_details, "description"):
+        description = _clean_string(package_details.get("description"))
+        if description is not None:
+            values["package_description"] = description
+
     attempt_nodes = [payload]
     attempts = _mapping(payload.get("attempts"))
     if attempts is not None:
