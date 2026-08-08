@@ -69,6 +69,16 @@ DELIVERY_VALUE_FIELDS = frozenset({
     "price_after_vat",
     "vat_rate",
     "pricing_currency_code",
+    "cod_amount_present",
+    "original_cod_amount_present",
+    "shipment_fees_present",
+    "shipping_fee_present",
+    "bundle_discount_present",
+    "opening_package_fee_present",
+    "bosta_material_fee_present",
+    "price_before_vat_present",
+    "price_after_vat_present",
+    "pricing_currency_code_present",
     "lifecycle_stage",
     "return_scenario",
     "lifecycle_rule_code",
@@ -144,7 +154,7 @@ class BostaPersistenceService:
         allowed_ids = list(self.env.context.get("allowed_company_ids") or self.env.user.company_ids.ids)
         if company.id not in allowed_ids:
             allowed_ids.append(company.id)
-        return self.Delivery.with_context(allowed_company_ids=allowed_ids).with_company(company)
+        return self.Delivery.with_context(allowed_company_ids=allowed_ids, bosta_delivery_persistence=True).with_company(company)
 
     def _sanitize_values(self, normalized):
         if not isinstance(normalized, dict):
@@ -163,6 +173,22 @@ class BostaPersistenceService:
                 and key not in LIFECYCLE_VALUE_FIELDS
             )
         }
+        presence_map = {
+            "cod_amount": "cod_amount_present",
+            "original_cod_amount": "original_cod_amount_present",
+            "shipment_fees": "shipment_fees_present",
+            "shipping_fee": "shipping_fee_present",
+            "bundle_discount": "bundle_discount_present",
+            "opening_package_fee": "opening_package_fee_present",
+            "bosta_material_fee": "bosta_material_fee_present",
+            "price_before_vat": "price_before_vat_present",
+            "price_after_vat": "price_after_vat_present",
+            "pricing_currency_code": "pricing_currency_code_present",
+        }
+        for source_field, presence_field in presence_map.items():
+            if source_field in raw_values:
+                values[presence_field] = True
+
         for required in ("bosta_delivery_id", "tracking_number"):
             value = values.get(required)
             if not isinstance(value, str) or not value.strip():

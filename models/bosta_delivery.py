@@ -1,5 +1,5 @@
 from odoo import _, api, fields, models
-from odoo.exceptions import ValidationError
+from odoo.exceptions import AccessError, ValidationError
 
 
 FLOW_SELECTION = [
@@ -34,6 +34,21 @@ RETURN_SCENARIO_SELECTION = [
     ("ambiguous", "Ambiguous"),
 ]
 
+
+_FINANCIAL_API_SOURCE_FIELDS = {
+    "cod_amount", "original_cod_amount", "shipment_fees", "shipping_fee",
+    "bundle_discount", "opening_package_fee", "bosta_material_fee",
+    "price_before_vat", "price_after_vat", "vat_rate", "pricing_currency_code",
+}
+_FINANCIAL_PRESENCE_FIELDS = {
+    "cod_amount_present", "original_cod_amount_present", "shipment_fees_present",
+    "shipping_fee_present", "bundle_discount_present", "opening_package_fee_present",
+    "bosta_material_fee_present", "price_before_vat_present",
+    "price_after_vat_present", "pricing_currency_code_present",
+}
+_FINANCIAL_ENRICHMENT_META_FIELDS = {
+    "financial_details_last_enriched_at", "financial_details_last_status",
+}
 
 class BostaDelivery(models.Model):
     _name = "bosta.delivery"
@@ -159,6 +174,8 @@ class BostaDelivery(models.Model):
 
     cod_amount = fields.Float(string="COD Amount")
     original_cod_amount = fields.Float(string="Original COD Amount")
+    cod_amount_present = fields.Boolean(readonly=True, copy=False, index=True)
+    original_cod_amount_present = fields.Boolean(readonly=True, copy=False)
 
     shipment_fees = fields.Float(string="Shipment Fees")
     shipping_fee = fields.Float(string="Shipping Fee")
@@ -169,6 +186,22 @@ class BostaDelivery(models.Model):
     price_after_vat = fields.Float(string="Price After VAT")
     vat_rate = fields.Float(string="VAT Rate")
     pricing_currency_code = fields.Char(string="Pricing Currency Code")
+
+    # Phase 9 presence flags preserve explicit zero versus missing financial data.
+    shipment_fees_present = fields.Boolean(readonly=True, copy=False, index=True)
+    shipping_fee_present = fields.Boolean(readonly=True, copy=False)
+    bundle_discount_present = fields.Boolean(readonly=True, copy=False)
+    opening_package_fee_present = fields.Boolean(readonly=True, copy=False)
+    bosta_material_fee_present = fields.Boolean(readonly=True, copy=False)
+    price_before_vat_present = fields.Boolean(readonly=True, copy=False)
+    price_after_vat_present = fields.Boolean(readonly=True, copy=False)
+    pricing_currency_code_present = fields.Boolean(readonly=True, copy=False)
+    financial_details_last_enriched_at = fields.Datetime(readonly=True, copy=False, index=True)
+    financial_details_last_status = fields.Char(readonly=True, copy=False)
+
+    financial_ids = fields.One2many(
+        "bosta.delivery.financial", "delivery_id", string="Operational Financial Snapshot", readonly=True
+    )
 
     original_delivery_id = fields.Many2one(
         "bosta.delivery",
@@ -236,7 +269,36 @@ class BostaDelivery(models.Model):
             record.item_count = len(record.item_ids)
 
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        if not self.env.context.get("bosta_delivery_persistence"):
+            protected_financial_fields = _FINANCIAL_API_SOURCE_FIELDS | _FINANCIAL_PRESENCE_FIELDS
+            for vals in vals_list:
+                if protected_financial_fields.intersection(vals):
+                    raise AccessError(_(
+                        "Bosta API financial evidence can only be created by the persistence service; use reviewed financial overrides instead."
+                    ))
+        if not self.env.context.get("bosta_financial_enrichment_meta"):
+            for vals in vals_list:
+                if _FINANCIAL_ENRICHMENT_META_FIELDS.intersection(vals):
+                    raise AccessError(_(
+                        "Bosta financial enrichment audit fields are maintained only by the enrichment engine."
+                    ))
+        return super().create(vals_list)
+
     def write(self, vals):
+        financial_api_fields = (_FINANCIAL_API_SOURCE_FIELDS | _FINANCIAL_PRESENCE_FIELDS).intersection(vals)
+        if financial_api_fields and not self.env.context.get("bosta_delivery_persistence"):
+            raise AccessError(_(
+                "Bosta API financial evidence can only be changed by the persistence service; use reviewed financial overrides instead."
+            ))
+        if (
+            _FINANCIAL_ENRICHMENT_META_FIELDS.intersection(vals)
+            and not self.env.context.get("bosta_financial_enrichment_meta")
+        ):
+            raise AccessError(_(
+                "Bosta financial enrichment audit fields are maintained only by the enrichment engine."
+            ))
         if "original_delivery_id" in vals:
             for record in self:
                 restored_cases = record.return_case_ids.filtered(lambda case: case.state == "restored")

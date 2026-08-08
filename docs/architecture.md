@@ -1,140 +1,131 @@
-# Bosta Integration Architecture — Phase 8
+# Bosta Integration Architecture — Phase 9
 
 ## Scope
 
 `bosta_integration` is an independent Odoo 18 module. Phases 0-6 provide the
 direct Bosta API boundary, deterministic extraction/normalization, persistent
-idempotent delivery sync, and lifecycle interpretation. Phase 7 adds product
-mapping foundations and opt-in inventory effects. Phase 8 adds safe return
-linking, auditable return cases, and exactly-once physical stock restoration.
+idempotent delivery sync, and lifecycle interpretation. Phase 7 adds explicit
+product mapping/tester relationships and opt-in inventory effects. Phase 8 adds
+safe return linking and exactly-once physical stock restoration. Phase 9 extends
+that accepted flow with operational delivery contribution snapshots and opt-in
+scheduled synchronization.
 
-Phase 8 does **not** create sale orders, partners, invoices, accounting entries,
-profit/settlement calculations, cron jobs, webhooks, or background queues.
+Phase 9 is **not accounting**. It does not create sale orders, partners,
+invoices, credit notes, journal entries, payments, refunds, purchase costing,
+or tax/company-net-profit calculations.
 
-## Product mapping
+## Existing sync path remains authoritative
 
-Authoritative stock-changing resolution is deliberately conservative and
-identity-aware:
-
-1. A valid existing mapped external-ID identity for the same company/source wins.
-2. Otherwise, a valid existing mapped deterministic code identity for the same
-   company/source wins, even when the later observation also gains an external ID.
-3. Only when neither authoritative identity exists may a safely parsed business
-   code match `product.product.default_code`, and only when exactly one eligible
-   explicit MAIN product exists.
-4. Titles may be retained for review but never auto-create a stock-authoritative
-   mapping.
-5. Unmatched or conflicting products block the whole delivery inventory effect.
-
-A code identity is not silently promoted into an external-ID alias. This prevents
-a later stronger observation from replacing a prior manual/authoritative code
-choice with a fresh `default_code` lookup.
-
-Bosta `productInfo.productId` is an external identity and is never compared to
-Odoo `default_code`.
-
-MAIN/tester relationships are explicit persisted fields on `product.product`.
-The manager-only bootstrap uses equal `default_code` plus the existing `3 ML`
-name convention only as a one-time conservative initializer; runtime inventory
-logic then relies on the persisted roles and links.
-
-## Inventory safety boundary
-
-Inventory is disabled by default. Enabling it requires the Bosta integration,
-an explicit go-live cutoff, a company-safe internal source location, and a
-company-safe Bosta Transit location. Multiple internal operation types must be
-disambiguated explicitly.
-
-Only forward deliveries can create outbound stock effects. Strong evidence that
-merchandise left the business causes an idempotent supported Odoo stock
-transfer:
+There is still one delivery-sync business path:
 
 ```text
-Internal Stock -> Bosta Transit
+Bosta Search
+  -> normalization
+  -> persistence / lifecycle
+  -> Phase 7 inventory evaluation
+  -> Phase 8 return evaluation
+  -> Phase 9 financial evaluation
 ```
 
-Each Bosta sale quantity moves the MAIN product and, when explicitly required,
-the linked tester in the same quantity. Missing mappings, conflicts, missing
-required tester links, insufficient stock, or reservation races block the
-entire delivery. No partial delivery stock mutation is allowed.
+Manual sync and scheduled sync both call `action_sync_bosta_deliveries()` and
+therefore use the same accepted PostgreSQL advisory lock. Cron does not contain a
+second persistence/inventory/return implementation.
 
-A successfully delivered forward shipment may then be finalized:
+## Product mapping and inventory safety
+
+Product resolution remains the accepted Phase 7 design: mapped external identity,
+then mapped deterministic code identity, then an exact unambiguous MAIN product
+code fallback. Titles never create stock-authoritative mappings. MAIN/tester
+relationships are explicit persisted product relationships.
+
+Inventory remains opt-in with a go-live cutoff. Forward stock leaves through
+supported Odoo pickings from the configured internal source to Bosta Transit,
+then successful delivery may finalize from historical Transit to Customer.
+`stock.quant` is never written directly.
+
+Phase 8 reverse flows still own physical restoration. RTO restores exactly the
+historical MAIN/TESTER quantities proven to have left. A post-delivery customer
+return restores only warehouse-inspected/accepted MAIN quantity and never the
+TESTER. Financial code never reconstructs restoration from lifecycle text.
+
+## Operational financial snapshot
+
+`bosta.delivery.financial` is unique per company/original forward delivery.
+`bosta.delivery.financial.line` snapshots each Phase 7 inventory-effect line and
+role with product, quantity, unit cost, gross cost, accepted restoration credit,
+and net cost.
+
+Recognized revenue is intentionally separate from COD. Positive or zero COD is
+not revenue unless an explicit manager action confirms that interpretation.
+Missing revenue remains unavailable.
+
+Product COGS is snapshotted from the actual Phase 7 product snapshot. A finite
+positive `product.standard_price` may be used and is named truthfully as
+`product_standard_price`; it is not called purchase-invoice cost. Missing/zero
+unconfigured product cost remains incomplete until an explicit audited manager
+cost override is supplied.
+
+Bosta fee handling prefers an explicit `shipmentFees` total only when its
+presence and compatible currency are known. Alias/components are not added on
+top of that total. Component-only pricing is partial evidence, not a fabricated
+total. API financial evidence fields are persistence-controlled so managers use
+audited financial override actions instead of silently rewriting Bosta evidence.
+
+When all required inputs are authoritative:
 
 ```text
-Bosta Transit -> Customers
+net COGS = gross COGS - accepted Phase 8 restoration cost credits
+
+Delivery Contribution =
+    recognized revenue
+    - net COGS
+    - Bosta logistics cost
+    - explicit return fees
+    + explicit compensation
 ```
 
-RTO and customer-return Bosta records never create a second outbound deduction.
-Phase 8 restores only from a safely linked original forward inventory effect.
-Lost, damaged, terminated-after-pickup, and ambiguous states remain review-only.
+Unknown inputs do not enter the formula as zero.
 
-## Idempotency and audit
+## Return-aware finance
 
-`bosta.inventory.effect` is unique per company/delivery and stores the applied
-picking references plus immutable product/quantity and source/transit location
-snapshots after outbound application. Before outbound exists, a retry may refresh
-the effect locations from current config; the outbound picking is then created
-from exactly those audited locations. Once outbound exists, those location fields
-cannot be replaced by later configuration changes. Delivered finalization always
-uses the effect's historical transit snapshot as its source and prefers the
-outgoing operation type from the warehouse context of the already-applied outbound
-picking. Repeated sync/retry therefore cannot create a second source deduction or
-final picking.
+Financial return effects always target the safely linked original forward
+delivery. `businessReference`, receiver data, COD, address, and date proximity
+are never used to link financial returns.
 
-The normal delivery sync and manager retry action use the same existing
-configuration advisory lock. Inventory work runs inside per-delivery database
-savepoints. Expected mapping/stock blocks are recorded for review; unexpected
-programming errors are not silently swallowed.
+A completed pre-delivery RTO may credit MAIN and TESTER only where applied Phase
+8 restoration-effect lines prove both were physically restored. The original
+Bosta logistics charge remains.
 
-Stock is changed only by supported `stock.picking` / `stock.move` validation.
-The integration never writes `stock.quant.quantity` directly.
+A post-delivery customer return credits only the accepted restored MAIN quantity.
+TESTER cost stays consumed. The original forward logistics charge remains, and
+an additional return fee is unknown until authoritative evidence or an explicit
+manager confirmation exists.
 
-## Package-description fallback
+Lost/damaged inventory receives no restoration credit and no invented Bosta
+compensation. Ambiguous/contradictory evidence is review-required.
 
-The Phase 7 pure parser accepts only fully deterministic observed package
-formats. It preserves leading zeroes and refuses a complete package description
-when any product association is malformed or ambiguous. Parsed package evidence
-is represented inside the mapping/inventory layer and never fabricated as a
-Phase 4 `bosta.delivery.item`.
+## Financial history and security
 
-## Phase 8 returns
+Financial records are company-isolated. Integration users are read-only;
+financial confirmations and overrides require the manager group and retain user,
+timestamp, source, and safe reason audit fields. Financial records store no API
+key, Authorization header, raw payload, customer phone, or customer address.
 
-`bosta.return.case` is the manager review boundary for reverse Bosta records.
-The existing `bosta.delivery.original_delivery_id` remains the authoritative
-original/return relation. Phase 8 never auto-links by `businessReference`,
-receiver/customer data, COD, address, title, or date proximity. A manager may
-select a candidate and use the explicit safe-link action; validation requires
-the same company, a different record, a forward original, and an RTO/customer
-return record. Conflicts are blocked rather than overwritten.
+Finalized snapshots are frozen. Current product cost, mapping, tester relation,
+or configuration changes do not rewrite finalized historical cost lines.
 
-A completed pre-delivery RTO restores exactly the products and quantities that
-the original Phase 7 outbound effect proves left stock:
+## Scheduled sync and Details enrichment
 
-```text
-historical Bosta Transit -> historical Source
-```
+One shared five-minute `ir.cron` selects due configs. `auto_sync_enabled` defaults
+False, each config has its own interval (minimum five minutes), and every attempt
+advances the next due time so failures do not create a tight retry loop.
 
-Both MAIN and TESTER are restored when their original outbound snapshot proves
-they moved. Current product mappings and current config locations are never used
-to reconstruct history.
+Optional financial Details enrichment is also OFF by default. Cron requests it
+through context on the same `action_sync_bosta_deliveries()` call, so the bounded
+Details pass executes before that action releases the same advisory lock. This
+prevents manual+cron or cron+cron overlap on one configuration.
 
-A post-delivery customer return is different. Bosta logistics completion only
-moves the case to inspection. The warehouse/manager must enter the physically
-verified returned MAIN quantity per original delivered inventory line and accept
-the inspection. Only then is MAIN restored:
-
-```text
-historical Customer location -> historical Source
-```
-
-TESTER is never restored for a post-delivery customer return. Zero/unknown
-quantity, over-return risk, missing original stock evidence, or a non-delivered
-original blocks restoration.
-
-`bosta.return.restoration.effect` and its lines are the immutable restoration
-ledger. Each line snapshots product, role, quantity, historical source and
-destination, and the original Phase 7 inventory-effect line. Database uniqueness
-prevents duplicate effects per return case, while row-locking original inventory
-lines plus cumulative restoration checks prevent multiple return records from
-over-restoring the same original quantity. Stock changes are created only via
-normal `stock.picking` / `stock.move` validation.
+Search extraction itself never calls Details. The enrichment service selects only
+financially relevant forward deliveries missing authoritative fee evidence,
+respects a bounded batch limit, avoids re-enriching a record more often than
+hourly, and stops safely on global authentication/rate-limit conditions.

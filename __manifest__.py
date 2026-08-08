@@ -1,7 +1,7 @@
 {
     "name": "Bosta Integration",
-    "version": "18.0.10.0.0",
-    "summary": "Bosta safe returns and idempotent stock restoration",
+    "version": "18.0.11.0.0",
+    "summary": "Bosta operational profitability, safe returns, and scheduled sync",
     "description": """
 Bosta Integration
 =================
@@ -24,8 +24,10 @@ and post-delivery customer-return MAIN restoration only after explicit warehouse
 inspection and approved returned quantities. It never auto-links by business
 reference or PII and never restores TESTER on a customer return.
 
-Profit, settlement, shipping/return fee accounting, refunds, invoices, sale
-orders, customer creation/matching, cron, webhooks, and queues remain deferred.
+Phase 9 adds operational contribution snapshots, immutable product-cost snapshots,
+Bosta logistics-fee evidence, return-aware cost credits, manager financial review,
+and opt-in scheduled sync with bounded optional Details enrichment. It remains
+independent from Sales, Accounting, Purchase, refunds, webhooks, and queues.
     """,
     "category": "Technical",
     "author": "My Company",
@@ -35,12 +37,14 @@ orders, customer creation/matching, cron, webhooks, and queues remain deferred.
         "security/bosta_security.xml",
         "security/ir.model.access.csv",
         "security/bosta_record_rules.xml",
+        "data/bosta_cron.xml",
         "views/product_product_views.xml",
         "views/bosta_config_views.xml",
         "views/bosta_delivery_views.xml",
         "views/bosta_product_mapping_views.xml",
         "views/bosta_inventory_views.xml",
         "views/bosta_return_views.xml",
+        "views/bosta_financial_views.xml",
     ],
     "application": True,
     "installable": True,

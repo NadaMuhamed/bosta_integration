@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class TestPhase8Baseline(TestCase):
     def test_01_manifest_version_dependencies_installable(self):
         manifest = ast.literal_eval((ROOT / "__manifest__.py").read_text())
-        self.assertEqual(manifest["version"], "18.0.10.0.0")
+        self.assertEqual(manifest["version"], "18.0.11.0.0")
         self.assertEqual(manifest["depends"], ["base", "stock"])
         self.assertTrue(manifest["installable"])
 

@@ -5,3 +5,4 @@ from . import bosta_delivery_item
 from . import bosta_product_mapping
 from . import bosta_inventory_effect
 from . import bosta_return_case
+from . import bosta_financial

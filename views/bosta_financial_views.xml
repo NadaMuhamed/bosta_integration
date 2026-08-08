@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+    <record id="view_bosta_delivery_financial_list" model="ir.ui.view">
+        <field name="name">bosta.delivery.financial.list</field>
+        <field name="model">bosta.delivery.financial</field>
+        <field name="groups_id" eval="[(4, ref('bosta_integration.group_bosta_integration_manager'))]"/>
+        <field name="arch" type="xml">
+            <list string="Bosta Operational Profitability" create="0" delete="0"
+                  decoration-success="financial_status in ['calculated','finalized']"
+                  decoration-warning="financial_status == 'incomplete'"
+                  decoration-danger="financial_status == 'review_required'">
+                <field name="delivery_id"/>
+                <field name="financial_status"/>
+                <field name="recognized_revenue_amount"/>
+                <field name="gross_cogs_amount"/>
+                <field name="net_cogs_amount"/>
+                <field name="logistics_cost_amount"/>
+                <field name="contribution_profit"/>
+                <field name="currency_id"/>
+                <field name="rule_code" optional="show"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_bosta_delivery_financial_form" model="ir.ui.view">
+        <field name="name">bosta.delivery.financial.form</field>
+        <field name="model">bosta.delivery.financial</field>
+        <field name="groups_id" eval="[(4, ref('bosta_integration.group_bosta_integration_manager'))]"/>
+        <field name="arch" type="xml">
+            <form string="Bosta Operational Financial Snapshot" create="0" delete="0">
+                <header>
+                    <button name="action_recalculate" type="object" string="Recalculate" class="btn-primary"
+                            invisible="financial_status == 'finalized'"/>
+                    <button name="action_finalize" type="object" string="Finalize"
+                            invisible="financial_status != 'calculated'"/>
+                    <button name="action_mark_review_required" type="object" string="Mark Review Required"
+                            invisible="financial_status == 'finalized'"/>
+                    <field name="financial_status" widget="statusbar"
+                           statusbar_visible="not_ready,incomplete,ready,calculated,finalized,review_required"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <h1><field name="delivery_id" readonly="1"/></h1>
+                    </div>
+                    <group>
+                        <group string="Recognized Revenue">
+                            <field name="recognized_revenue_amount" readonly="1"/>
+                            <field name="revenue_source" readonly="1"/>
+                            <field name="revenue_confirmed_at" readonly="1"/>
+                            <field name="revenue_confirmed_by_id" readonly="1"/>
+                            <field name="revenue_override_reason" readonly="1"/>
+                        </group>
+                        <group string="Operational Contribution">
+                            <field name="contribution_profit" readonly="1"/>
+                            <field name="currency_id" readonly="1"/>
+                            <field name="calculated_at" readonly="1"/>
+                            <field name="finalized_at" readonly="1"/>
+                            <field name="finalized_by_id" readonly="1"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="COGS Snapshot">
+                            <field name="main_cogs_amount" readonly="1"/>
+                            <field name="tester_cogs_amount" readonly="1"/>
+                            <field name="gross_cogs_amount" readonly="1"/>
+                            <field name="restored_main_cost_credit" readonly="1"/>
+                            <field name="restored_tester_cost_credit" readonly="1"/>
+                            <field name="net_cogs_amount" readonly="1"/>
+                        </group>
+                        <group string="Bosta / Return Charges">
+                            <field name="logistics_cost_amount" readonly="1"/>
+                            <field name="logistics_cost_source" readonly="1"/>
+                            <field name="logistics_cost_status" readonly="1"/>
+                            <field name="logistics_override_reason" readonly="1"/>
+                            <field name="return_fee_amount" readonly="1"/>
+                            <field name="return_fee_source" readonly="1"/>
+                            <field name="compensation_amount" readonly="1"/>
+                            <field name="compensation_source" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Review Audit">
+                        <field name="rule_code" readonly="1"/>
+                        <field name="safe_review_reason" readonly="1"/>
+                        <field name="company_id" readonly="1" groups="base.group_multi_company"/>
+                    </group>
+                    <notebook>
+                        <page string="Cost Lines">
+                            <field name="line_ids" nolabel="1">
+                                <list create="0" delete="0">
+                                    <field name="role"/>
+                                    <field name="product_id"/>
+                                    <field name="quantity"/>
+                                    <field name="unit_cost"/>
+                                    <field name="gross_cost"/>
+                                    <field name="restored_quantity"/>
+                                    <field name="restored_cost_credit"/>
+                                    <field name="net_cost"/>
+                                    <field name="cost_source"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Post-finalization Adjustments">
+                            <group>
+                                <field name="post_finalize_inventory_credit" readonly="1"/>
+                                <field name="contribution_after_adjustments" readonly="1"/>
+                            </group>
+                            <field name="adjustment_ids" nolabel="1" readonly="1">
+                                <list create="0" delete="0" edit="0">
+                                    <field name="created_at"/>
+                                    <field name="return_type"/>
+                                    <field name="role"/>
+                                    <field name="quantity"/>
+                                    <field name="unit_cost"/>
+                                    <field name="amount"/>
+                                    <field name="source"/>
+                                    <field name="rule_code"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Manager Confirmations">
+                            <group>
+                                <group>
+                                    <field name="manual_revenue_input"/>
+                                    <button name="action_confirm_revenue" type="object" string="Confirm Revenue" class="btn-primary"/>
+                                    <button name="action_confirm_cod_as_revenue" type="object" string="Confirm COD as Revenue"/>
+                                </group>
+                                <group>
+                                    <field name="manual_logistics_input"/>
+                                    <button name="action_confirm_logistics_cost" type="object" string="Confirm Logistics Cost"/>
+                                    <field name="manual_return_fee_input"/>
+                                    <button name="action_confirm_return_fee" type="object" string="Confirm Return Fee"/>
+                                    <field name="manual_compensation_input"/>
+                                    <button name="action_confirm_compensation" type="object" string="Confirm Compensation"/>
+                                </group>
+                            </group>
+                            <field name="manual_override_reason" placeholder="Safe review reason (no customer PII)"/>
+                            <div class="text-muted">
+                                COD is never treated as recognized revenue automatically. Use the explicit manager action only when COD is authoritative for this delivery.
+                            </div>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_bosta_delivery_financial_line_form" model="ir.ui.view">
+        <field name="name">bosta.delivery.financial.line.form</field>
+        <field name="model">bosta.delivery.financial.line</field>
+        <field name="groups_id" eval="[(4, ref('bosta_integration.group_bosta_integration_manager'))]"/>
+        <field name="arch" type="xml">
+            <form string="Historical Cost Snapshot" create="0" delete="0">
+                <header>
+                    <button name="action_confirm_cost_override" type="object" string="Confirm Cost Override" class="btn-primary"/>
+                </header>
+                <sheet>
+                    <group>
+                        <group string="Snapshot">
+                            <field name="product_id" readonly="1"/>
+                            <field name="role" readonly="1"/>
+                            <field name="quantity" readonly="1"/>
+                            <field name="unit_cost" readonly="1"/>
+                            <field name="gross_cost" readonly="1"/>
+                            <field name="cost_source" readonly="1"/>
+                            <field name="cost_snapshotted_at" readonly="1"/>
+                        </group>
+                        <group string="Return Credit">
+                            <field name="restored_quantity" readonly="1"/>
+                            <field name="restored_cost_credit" readonly="1"/>
+                            <field name="net_cost" readonly="1"/>
+                        </group>
+                    </group>
+                    <group string="Manager Cost Override">
+                        <field name="manual_unit_cost_input"/>
+                        <field name="manual_override_reason"/>
+                        <field name="cost_overridden_at" readonly="1"/>
+                        <field name="cost_overridden_by_id" readonly="1"/>
+                        <field name="cost_override_reason" readonly="1"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_bosta_delivery_financial_search" model="ir.ui.view">
+        <field name="name">bosta.delivery.financial.search</field>
+        <field name="model">bosta.delivery.financial</field>
+        <field name="arch" type="xml">
+            <search string="Operational Financial Review">
+                <field name="delivery_id"/>
+                <field name="financial_status"/>
+                <field name="rule_code"/>
+                <filter name="incomplete" string="Incomplete" domain="[('financial_status','=','incomplete')]"/>
+                <filter name="review" string="Review Required" domain="[('financial_status','=','review_required')]"/>
+                <filter name="calculated" string="Calculated" domain="[('financial_status','in',['calculated','finalized'])]"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_status" string="Status" context="{'group_by':'financial_status'}"/>
+                    <filter name="group_company" string="Company" context="{'group_by':'company_id'}" groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_bosta_delivery_financial" model="ir.actions.act_window">
+        <field name="name">Operational Profitability</field>
+        <field name="res_model">bosta.delivery.financial</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="view_bosta_delivery_financial_search"/>
+    </record>
+
+    <menuitem id="menu_bosta_delivery_financial" name="Operational Profitability"
+              parent="menu_bosta_integration_root" action="action_bosta_delivery_financial"
+              sequence="8" groups="bosta_integration.group_bosta_integration_manager"/>
+
+    <record id="view_bosta_delivery_form_phase9_financial" model="ir.ui.view">
+        <field name="name">bosta.delivery.form.phase9.financial</field>
+        <field name="model">bosta.delivery</field>
+        <field name="inherit_id" ref="bosta_integration.view_bosta_delivery_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//notebook" position="inside">
+                <page string="Operational Profitability" groups="bosta_integration.group_bosta_integration_manager">
+                    <field name="financial_ids" nolabel="1" readonly="1">
+                        <list create="0" delete="0" edit="0">
+                            <field name="financial_status"/>
+                            <field name="recognized_revenue_amount"/>
+                            <field name="main_cogs_amount"/>
+                            <field name="tester_cogs_amount"/>
+                            <field name="restored_main_cost_credit"/>
+                            <field name="restored_tester_cost_credit"/>
+                            <field name="net_cogs_amount"/>
+                            <field name="logistics_cost_amount"/>
+                            <field name="return_fee_amount"/>
+                            <field name="compensation_amount"/>
+                            <field name="contribution_profit"/>
+                            <field name="currency_id"/>
+                            <field name="safe_review_reason"/>
+                        </list>
+                    </field>
+                </page>
+            </xpath>
+        </field>
+    </record>
+
+    <record id="view_bosta_return_case_form_phase9_financial" model="ir.ui.view">
+        <field name="name">bosta.return.case.form.phase9.financial</field>
+        <field name="model">bosta.return.case</field>
+        <field name="inherit_id" ref="bosta_integration.view_bosta_return_case_form"/>
+        <field name="arch" type="xml">
+            <xpath expr="//group[@name='restoration_audit']" position="after">
+                <group string="Financial Effect" groups="bosta_integration.group_bosta_integration_manager">
+                    <field name="original_financial_id" readonly="1"/>
+                </group>
+            </xpath>
+        </field>
+    </record>
+</odoo>

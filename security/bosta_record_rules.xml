@@ -70,5 +70,26 @@
             <field name="domain_force">[("company_id", "in", company_ids)]</field>
             <field name="groups" eval="[(4, ref('bosta_integration.group_bosta_integration_user'))]"/>
         </record>
+
+        <record id="rule_bosta_delivery_financial_company" model="ir.rule">
+            <field name="name">Bosta Financial Snapshots: allowed companies</field>
+            <field name="model_id" ref="model_bosta_delivery_financial"/>
+            <field name="domain_force">[("company_id", "in", company_ids)]</field>
+            <field name="groups" eval="[(4, ref('bosta_integration.group_bosta_integration_user'))]"/>
+        </record>
+
+        <record id="rule_bosta_delivery_financial_line_company" model="ir.rule">
+            <field name="name">Bosta Financial Lines: allowed companies</field>
+            <field name="model_id" ref="model_bosta_delivery_financial_line"/>
+            <field name="domain_force">[("company_id", "in", company_ids)]</field>
+            <field name="groups" eval="[(4, ref('bosta_integration.group_bosta_integration_user'))]"/>
+        </record>
+
+        <record id="rule_bosta_financial_adjustment_company" model="ir.rule">
+            <field name="name">Bosta Financial Adjustments: allowed companies</field>
+            <field name="model_id" ref="model_bosta_financial_adjustment"/>
+            <field name="domain_force">[("company_id", "in", company_ids)]</field>
+            <field name="groups" eval="[(4, ref('bosta_integration.group_bosta_integration_user'))]"/>
+        </record>
     </data>
 </odoo>

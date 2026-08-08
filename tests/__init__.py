@@ -27,3 +27,6 @@ from . import test_phase7_sync_integration
 from . import test_return_restoration
 from . import test_phase8_baseline
 from . import test_phase8_sync_integration
+from . import test_phase9_baseline
+
+from . import test_phase9_financial_runtime

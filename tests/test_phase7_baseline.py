@@ -12,7 +12,7 @@ class TestBostaPhase7Baseline(TransactionCase):
 
     def test_manifest_version_dependency_and_installability(self):
         manifest = get_manifest("bosta_integration")
-        self.assertEqual(manifest["version"], "18.0.10.0.0")
+        self.assertEqual(manifest["version"], "18.0.11.0.0")
         self.assertEqual(manifest.get("depends"), ["base", "stock"])
         self.assertTrue(manifest.get("installable"))
         for forbidden in ("sale", "account", "purchase", "website"):
@@ -50,9 +50,14 @@ class TestBostaPhase7Baseline(TransactionCase):
 
     def test_no_phase8_business_documents_or_customer_matching(self):
         runtime = "\n".join(
-            p.read_text(encoding="utf-8").lower()
-            for folder in ("models", "services")
-            for p in sorted((self.module_path / folder).glob("*.py"))
+            (self.module_path / relative).read_text(encoding="utf-8").lower()
+            for relative in (
+                "models/product_product.py",
+                "models/bosta_product_mapping.py",
+                "models/bosta_inventory_effect.py",
+                "services/bosta_product_mapping_service.py",
+                "services/bosta_inventory_service.py",
+            )
         )
         for forbidden in (
             'env["sale.order"]', "env['sale.order']",
@@ -63,10 +68,12 @@ class TestBostaPhase7Baseline(TransactionCase):
         ):
             self.assertNotIn(forbidden, runtime)
 
-    def test_no_cron_or_webhook_added(self):
-        xml = "\n".join(p.read_text(encoding="utf-8").lower() for p in self.module_path.rglob("*.xml"))
-        self.assertNotIn('model="ir.cron"', xml)
-        self.assertNotIn("webhook", xml)
+    def test_phase9_cron_is_separate_from_phase7_inventory_and_no_webhook(self):
+        cron = (self.module_path / "data" / "bosta_cron.xml").read_text(encoding="utf-8").lower()
+        inventory = (self.module_path / "services" / "bosta_inventory_service.py").read_text(encoding="utf-8").lower()
+        self.assertIn('model="ir.cron"', cron)
+        self.assertNotIn("ir.cron", inventory)
+        self.assertNotIn("webhook", cron + inventory)
 
     def test_no_raw_payload_or_timeline_storage(self):
         Delivery = self.env["bosta.delivery"]

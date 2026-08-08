@@ -13,6 +13,8 @@ from ..services.bosta_inventory_service import BostaInventoryService
 from ..services.bosta_product_mapping_service import BostaProductMappingService
 from ..services.bosta_return_service import BostaReturnService
 from ..services.bosta_persistence_service import BostaPersistenceService
+from ..services.bosta_financial_service import BostaFinancialService
+from ..services.bosta_financial_enrichment_service import BostaFinancialEnrichmentService
 from ..services.exceptions import BostaApiError, BostaPersistenceError
 
 
@@ -52,6 +54,20 @@ _SYNC_STATUS_VALUES = [
     ("partial", "Partial"),
     ("failed", "Failed"),
 ]
+_AUTO_SYNC_STATUS_VALUES = [
+    ("never", "Never"),
+    ("success", "Success"),
+    ("partial", "Partial"),
+    ("failed", "Failed"),
+    ("busy", "Busy / Skipped"),
+]
+_AUTO_SYNC_AUDIT_FIELDS = {
+    "next_auto_sync_at",
+    "last_auto_sync_at",
+    "last_auto_sync_status",
+    "last_auto_sync_error",
+}
+
 _SYNC_AUDIT_FIELDS = {
     "last_sync_started_at",
     "last_sync_completed_at",
@@ -69,7 +85,7 @@ _PROTECTED_API_STATE_FIELDS = {
     "last_api_test_at",
     "last_successful_api_request_at",
     "last_api_error",
-} | _SYNC_AUDIT_FIELDS
+} | _SYNC_AUDIT_FIELDS | _AUTO_SYNC_AUDIT_FIELDS
 
 
 class BostaIntegrationConfig(models.Model):
@@ -177,6 +193,26 @@ class BostaIntegrationConfig(models.Model):
     last_sync_conflict_count = fields.Integer(string="Last Sync Conflicts", readonly=True, copy=False)
     last_sync_error_count = fields.Integer(string="Last Sync Errors", readonly=True, copy=False)
     last_sync_error = fields.Text(string="Last Sync Error", readonly=True, copy=False)
+
+    # Phase 9 scheduled synchronization is opt-in. One shared ir.cron selects
+    # only configurations that are due; no network request is made on install.
+    auto_sync_enabled = fields.Boolean(string="Auto Sync Enabled", default=False, copy=False)
+    auto_sync_interval_minutes = fields.Integer(
+        string="Auto Sync Interval (minutes)", default=15, required=True, copy=False
+    )
+    next_auto_sync_at = fields.Datetime(string="Next Auto Sync", readonly=True, copy=False, index=True)
+    last_auto_sync_at = fields.Datetime(string="Last Auto Sync", readonly=True, copy=False)
+    last_auto_sync_status = fields.Selection(
+        _AUTO_SYNC_STATUS_VALUES, string="Last Auto Sync Status", default="never", readonly=True, copy=False
+    )
+    last_auto_sync_error = fields.Char(string="Last Auto Sync Error", readonly=True, copy=False)
+
+    financial_details_enrichment_enabled = fields.Boolean(
+        string="Financial Details Enrichment Enabled", default=False, copy=False
+    )
+    financial_details_batch_limit = fields.Integer(
+        string="Financial Details Batch Limit", default=50, required=True, copy=False
+    )
 
     # Phase 7 inventory is deliberately opt-in. Existing historical deliveries
     # cannot affect stock until a manager configures all required safeguards.
@@ -287,16 +323,31 @@ class BostaIntegrationConfig(models.Model):
             if "api_key_env_var" in vals:
                 vals["api_key_env_var"] = self._prepare_api_key_env_var(vals["api_key_env_var"])
             prepared.append(vals)
-        return super().create(prepared)
+        records = super().create(prepared)
+        now = fields.Datetime.now()
+        for record in records.filtered("auto_sync_enabled"):
+            record._write_auto_sync_state({"next_auto_sync_at": now})
+        return records
 
     def write(self, vals):
         vals = dict(vals)
         self._ensure_no_external_api_state_fields(vals)
+        enabling_auto = vals.get("auto_sync_enabled") is True
+        disabling_auto = vals.get("auto_sync_enabled") is False
         if "api_base_url" in vals:
             vals["api_base_url"] = self._prepare_api_base_url(vals["api_base_url"])
         if "api_key_env_var" in vals:
             vals["api_key_env_var"] = self._prepare_api_key_env_var(vals["api_key_env_var"])
-        return super().write(vals)
+        result = super().write(vals)
+        if enabling_auto:
+            now = fields.Datetime.now()
+            for record in self:
+                if not record.next_auto_sync_at:
+                    record._write_auto_sync_state({"next_auto_sync_at": now})
+        elif disabling_auto:
+            for record in self:
+                record._write_auto_sync_state({"next_auto_sync_at": False})
+        return result
 
     @api.constrains("api_base_url")
     def _check_api_base_url(self):
@@ -325,6 +376,18 @@ class BostaIntegrationConfig(models.Model):
         for record in self:
             if not 1 <= record.max_pages <= 10000:
                 raise ValidationError(_("Maximum pages must be between 1 and 10000."))
+
+    @api.constrains("auto_sync_interval_minutes", "auto_sync_enabled")
+    def _check_auto_sync_interval(self):
+        for record in self:
+            if record.auto_sync_interval_minutes < 5:
+                raise ValidationError(_("Auto sync interval must be at least 5 minutes."))
+
+    @api.constrains("financial_details_batch_limit")
+    def _check_financial_details_batch_limit(self):
+        for record in self:
+            if not 1 <= record.financial_details_batch_limit <= 200:
+                raise ValidationError(_("Financial Details batch limit must be between 1 and 200."))
 
     @api.constrains(
         "integration_enabled",
@@ -487,6 +550,17 @@ class BostaIntegrationConfig(models.Model):
         self.ensure_one()
         safe_vals = {key: value for key, value in vals.items() if key in _SYNC_AUDIT_FIELDS}
         return super(BostaIntegrationConfig, self).write(safe_vals)
+
+    def _write_auto_sync_state(self, vals):
+        self.ensure_one()
+        safe_vals = {key: value for key, value in vals.items() if key in _AUTO_SYNC_AUDIT_FIELDS}
+        return super(BostaIntegrationConfig, self).write(safe_vals)
+
+    def _next_auto_sync_value(self, now=None):
+        self.ensure_one()
+        from datetime import timedelta
+        now = now or fields.Datetime.now()
+        return now + timedelta(minutes=max(int(self.auto_sync_interval_minutes or 5), 5))
 
     def _sync_lock_key(self):
         self.ensure_one()
@@ -677,13 +751,14 @@ class BostaIntegrationConfig(models.Model):
             persistence = BostaPersistenceService(self.env)
             inventory = BostaInventoryService(self.env, self)
             returns = BostaReturnService(self.env, self)
+            finance = BostaFinancialService(self.env, self)
 
             def _post_persist(delivery):
-                # Phase 8 runs only after persistence/lifecycle and Phase 7
-                # inventory evaluation. Expected return blocks are represented
-                # on return cases; unexpected programming errors still surface.
+                # Preserve the accepted Phase 7/8 order: persistence/lifecycle,
+                # inventory, returns, then Phase 9 financial evaluation.
                 inventory.process_delivery(delivery)
                 returns.process_delivery(delivery)
+                finance.process_delivery(delivery)
 
             try:
                 persistence.persist_search_deliveries(
@@ -694,8 +769,23 @@ class BostaIntegrationConfig(models.Model):
                     summary=summary,
                     post_persist=_post_persist,
                 )
+                enrichment_result = False
+                if (
+                    self.env.context.get("bosta_run_financial_enrichment")
+                    and self.financial_details_enrichment_enabled
+                ):
+                    enrichment_result = BostaFinancialEnrichmentService(
+                        self.env, self, extraction, persistence
+                    ).run()
             except BostaApiError as exc:
-                safe_error = self._safe_status_message(getattr(exc, "status", "unknown_error"))
+                api_status = getattr(exc, "status", "unknown_error")
+                if api_status not in _API_STATUS_KEYS:
+                    api_status = "unknown_error"
+                safe_error = self._safe_status_message(api_status)
+                self._write_api_state({
+                    "api_status": api_status,
+                    "last_api_error": safe_error,
+                })
                 self._write_sync_state(
                     self._sync_summary_state_values(
                         summary,
@@ -726,6 +816,22 @@ class BostaIntegrationConfig(models.Model):
 
             status = "partial" if summary["conflicts"] or summary["errors"] else "success"
             safe_error = _("Some Bosta deliveries could not be persisted safely.") if status == "partial" else False
+            completed_api_at = fields.Datetime.now()
+            enrichment_stop_status = (
+                enrichment_result.get("stop_status") if enrichment_result else False
+            )
+            if enrichment_stop_status in _API_STATUS_KEYS:
+                self._write_api_state({
+                    "api_status": enrichment_stop_status,
+                    "last_successful_api_request_at": completed_api_at,
+                    "last_api_error": self._safe_status_message(enrichment_stop_status),
+                })
+            else:
+                self._write_api_state({
+                    "api_status": "connected",
+                    "last_successful_api_request_at": completed_api_at,
+                    "last_api_error": False,
+                })
             self._write_sync_state(
                 self._sync_summary_state_values(summary, status=status, error=safe_error)
             )
@@ -742,4 +848,70 @@ class BostaIntegrationConfig(models.Model):
             return self._sync_notification(summary, status=status)
         finally:
             self._release_sync_lock()
+
+    def action_process_pending_financials(self):
+        self._ensure_manager_action_access()
+        counts = BostaFinancialService(self.env, self).process_company_pending(self.company_id)
+        return {
+            "type": "ir.actions.client",
+            "tag": "display_notification",
+            "params": {
+                "title": _("Bosta Financial Review"),
+                "message": _(
+                    "Processed: %(processed)s\nCalculated: %(calculated)s\nIncomplete: %(incomplete)s\nReview required: %(review_required)s"
+                ) % counts,
+                "type": "warning" if counts["incomplete"] or counts["review_required"] else "success",
+                "sticky": bool(counts["incomplete"] or counts["review_required"]),
+            },
+        }
+
+    @api.model
+    def _cron_sync_due_configs(self):
+        now = fields.Datetime.now()
+        configs = self.sudo().search([
+            ("active", "=", True),
+            ("integration_enabled", "=", True),
+            ("auto_sync_enabled", "=", True),
+            ("next_auto_sync_at", "!=", False),
+            ("next_auto_sync_at", "<=", now),
+        ], order="next_auto_sync_at, id")
+        for base_config in configs:
+            config = base_config.sudo().with_company(base_config.company_id)
+            env_name = config.api_key_env_var or ""
+            api_key = os.environ.get(env_name) if _ENV_VAR_RE.fullmatch(env_name) else None
+            next_at = config._next_auto_sync_value(now)
+            if not isinstance(api_key, str) or not api_key.strip():
+                config._write_auto_sync_state({
+                    "last_auto_sync_at": now,
+                    "last_auto_sync_status": "failed",
+                    "last_auto_sync_error": "api_key_not_configured",
+                    "next_auto_sync_at": next_at,
+                })
+                continue
+            try:
+                with self.env.cr.savepoint():
+                    config.with_context(
+                        bosta_run_financial_enrichment=True
+                    ).action_sync_bosta_deliveries()
+                auto_status = config.last_sync_status if config.last_sync_status in ("success", "partial") else "failed"
+                safe_error = config.last_sync_error or False
+            except UserError:
+                # A same-config manual/cron overlap is safely blocked by the
+                # accepted advisory lock. Do not expose exception text.
+                auto_status = "busy"
+                safe_error = "sync_busy_or_configuration_blocked"
+            except Exception:
+                # Per-config isolation: never log exception content/tracebacks here.
+                # The underlying sync releases its advisory lock in its own finally
+                # block; cron audit stores only this fixed non-sensitive code.
+                _logger.error("Unexpected scheduled Bosta sync failure; sensitive details redacted")
+                auto_status = "failed"
+                safe_error = "unexpected_scheduled_sync_failure"
+            config._write_auto_sync_state({
+                "last_auto_sync_at": now,
+                "last_auto_sync_status": auto_status,
+                "last_auto_sync_error": safe_error,
+                "next_auto_sync_at": next_at,
+            })
+        return True
 

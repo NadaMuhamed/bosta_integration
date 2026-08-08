@@ -13,21 +13,19 @@ class TestBostaPhase5Baseline(TransactionCase):
 
     def test_01_manifest_version_dependencies_and_installability(self):
         manifest = get_manifest("bosta_integration")
-        self.assertEqual(manifest["version"], "18.0.10.0.0")
+        self.assertEqual(manifest["version"], "18.0.11.0.0")
         self.assertEqual(manifest.get("depends"), ["base", "stock"])
         self.assertTrue(manifest.get("installable"))
         for forbidden in ("sale", "account", "website"):
             self.assertNotIn(forbidden, manifest.get("depends", []))
 
-    def test_02_no_cron_or_background_sync_is_added(self):
+    def test_02_phase9_cron_does_not_duplicate_phase5_sync_logic(self):
         module_path = Path(get_module_path("bosta_integration"))
-        xml = "\n".join(
-            path.read_text(encoding="utf-8").lower()
-            for path in sorted(module_path.rglob("*.xml"))
-        )
-        self.assertNotIn('model="ir.cron"', xml)
-        self.assertNotIn("interval_number", xml)
-        self.assertNotIn("nextcall", xml)
+        cron = (module_path / "data" / "bosta_cron.xml").read_text(encoding="utf-8").lower()
+        self.assertIn('model="ir.cron"', cron)
+        self.assertIn("model._cron_sync_due_configs()", cron)
+        self.assertNotIn("/api/v2/deliveries/search", cron)
+        self.assertNotIn("nextcall", cron)
 
     def test_03_phase4_normalizer_and_extraction_remain_orm_free(self):
         module_path = Path(get_module_path("bosta_integration"))

@@ -85,7 +85,7 @@ class Phase7InventoryMixin:
         if collected:
             vals["collected_from_business_at"] = created + timedelta(hours=2)
         vals.update(extra)
-        return self.env["bosta.delivery"].sudo().with_company(self.company).create(vals)
+        return self.env["bosta.delivery"].sudo().with_context(bosta_delivery_persistence=True).with_company(self.company).create(vals)
 
     def _service(self):
         return BostaInventoryService(self.env, self.config)

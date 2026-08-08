@@ -19,7 +19,7 @@ class TestBostaPhase6Baseline(TransactionCase):
 
     def test_01_manifest_version_dependency_and_installability(self):
         manifest = get_manifest("bosta_integration")
-        self.assertEqual(manifest["version"], "18.0.10.0.0")
+        self.assertEqual(manifest["version"], "18.0.11.0.0")
         self.assertEqual(manifest.get("depends"), ["base", "stock"])
         self.assertTrue(manifest.get("installable"))
 
@@ -79,14 +79,13 @@ class TestBostaPhase6Baseline(TransactionCase):
             with self.subTest(value=value):
                 self.assertNotIn(value, runtime)
 
-    def test_07_no_cron_added(self):
-        xml = "\n".join(
-            path.read_text(encoding="utf-8").lower()
-            for path in sorted(self.module_path.rglob("*.xml"))
-        )
-        self.assertNotIn('model="ir.cron"', xml)
-        self.assertNotIn("interval_number", xml)
-        self.assertNotIn("nextcall", xml)
+    def test_07_phase9_cron_keeps_phase6_search_details_separation(self):
+        cron = (self.module_path / "data" / "bosta_cron.xml").read_text(encoding="utf-8").lower()
+        extraction = (self.module_path / "services" / "bosta_extraction_service.py").read_text(encoding="utf-8")
+        search_method = extraction.split("def iter_normalized_search_deliveries", 1)[1].split("def get_normalized_delivery_details", 1)[0]
+        self.assertIn('model="ir.cron"', cron)
+        self.assertNotIn("get_delivery_details", search_method)
+        self.assertNotIn("nextcall", cron)
 
     def test_08_search_path_has_no_implicit_details_call(self):
         extraction = (self.module_path / "services" / "bosta_extraction_service.py").read_text(encoding="utf-8")

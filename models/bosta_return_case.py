@@ -115,6 +115,17 @@ class BostaReturnCase(models.Model):
         string="Customer Return Quantities",
         readonly=False,
     )
+    original_financial_id = fields.Many2one(
+        "bosta.delivery.financial",
+        string="Original Delivery Financial Effect",
+        compute="_compute_original_financial_id",
+        readonly=True,
+    )
+
+    @api.depends("original_delivery_id", "original_delivery_id.financial_ids")
+    def _compute_original_financial_id(self):
+        for case in self:
+            case.original_financial_id = case.original_delivery_id.financial_ids[:1]
 
     _sql_constraints = [
         (

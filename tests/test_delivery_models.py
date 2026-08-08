@@ -3,6 +3,8 @@ from psycopg2 import IntegrityError
 from odoo.exceptions import UserError, ValidationError
 from odoo.tests import TransactionCase
 
+from ..services.bosta_persistence_service import BostaPersistenceService
+
 
 class TestBostaDeliveryModels(TransactionCase):
     @classmethod
@@ -144,9 +146,17 @@ class TestBostaDeliveryModels(TransactionCase):
         self.assertEqual(delivery.flow_type, "customer_return")
 
     def test_pricing_and_original_cod_are_independent_storage(self):
-        delivery = self.Delivery.create(
-            self._values(cod_amount=0.0, original_cod_amount=850.0)
+        values = self._values(cod_amount=0.0, original_cod_amount=850.0)
+        result = BostaPersistenceService(self.env).upsert_normalized_delivery(
+            {
+                "values": values,
+                "items": None,
+                "timeline": None,
+                "source_kind": "search",
+            },
+            self.company_a,
         )
+        delivery = result["record"]
         self.assertEqual(delivery.cod_amount, 0.0)
         self.assertEqual(delivery.original_cod_amount, 850.0)
 

@@ -78,7 +78,7 @@
                         </div>
                     </group>
 
-                    <group string="Restoration Audit">
+                    <group name="restoration_audit" string="Restoration Audit">
                         <group>
                             <field name="restoration_effect_id" readonly="1"/>
                             <field name="restoration_picking_id" readonly="1"/>

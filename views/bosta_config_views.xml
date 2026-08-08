@@ -10,6 +10,7 @@
                 <field name="company_id" groups="base.group_multi_company"/>
                 <field name="integration_enabled"/>
                 <field name="inventory_sync_enabled"/>
+                <field name="auto_sync_enabled"/>
                 <field name="api_key_configured"/>
                 <field name="api_status"/>
                 <field name="active" optional="hide"/>
@@ -57,6 +58,12 @@
                         string="Retry Pending Returns"
                         groups="bosta_integration.group_bosta_integration_manager"
                     />
+                    <button
+                        name="action_process_pending_financials"
+                        type="object"
+                        string="Recalculate Financial Review"
+                        groups="bosta_integration.group_bosta_integration_manager"
+                    />
                 </header>
                 <sheet>
                     <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger" invisible="active"/>
@@ -94,6 +101,31 @@
                             <field name="stock_source_location_id" required="inventory_sync_enabled"/>
                             <field name="bosta_transit_location_id" required="inventory_sync_enabled"/>
                             <field name="stock_picking_type_id"/>
+                        </group>
+                    </group>
+
+                    <group string="Phase 9 Scheduled Sync">
+                        <group>
+                            <field name="auto_sync_enabled"/>
+                            <field name="auto_sync_interval_minutes" required="auto_sync_enabled"/>
+                            <field name="next_auto_sync_at" readonly="1"/>
+                        </group>
+                        <group>
+                            <field name="last_auto_sync_at" readonly="1"/>
+                            <field name="last_auto_sync_status" readonly="1"/>
+                            <field name="last_auto_sync_error" readonly="1"/>
+                        </group>
+                    </group>
+
+                    <group string="Phase 9 Financial Details Enrichment">
+                        <group>
+                            <field name="financial_details_enrichment_enabled"/>
+                            <field name="financial_details_batch_limit" required="financial_details_enrichment_enabled"/>
+                        </group>
+                        <group>
+                            <div class="text-muted">
+                                Disabled by default. When enabled, scheduled sync performs a bounded Details pass only for financially relevant deliveries missing authoritative fee totals.
+                            </div>
                         </group>
                     </group>
 
